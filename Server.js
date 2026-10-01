@@ -397,6 +397,85 @@ function writeExcel(rows) {
   }
 }
 
+function getTokenPrefix(tokenType) {
+  const prefixes = {
+    Bullet: "BUL",
+    Saree: "SAR",
+    Silver: "SLV",
+  };
+
+  return prefixes[tokenType];
+}
+
+function getSerialFromToken(token) {
+  if (!token) return 0;
+
+  const match = String(token).match(/(\d+)$/);
+
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function makeTokenId(tokenType, serial) {
+  const prefix = getTokenPrefix(tokenType);
+
+  return `${prefix}${String(serial).padStart(4, "0")}`;
+}
+
+function getNextTokenSerial(rows, tokenType) {
+  let maxSerial = 0;
+
+  rows.forEach((row) => {
+    if (row["Token Type"] !== tokenType) return;
+
+    const startSerial = getSerialFromToken(row["Token Start"]);
+    const endSerial = getSerialFromToken(row["Token End"]);
+
+    maxSerial = Math.max(
+      maxSerial,
+      startSerial,
+      endSerial
+    );
+  });
+
+  return maxSerial + 1;
+}
+
+function getNextOrderNumber(rows) {
+  let maxOrder = 0;
+
+  rows.forEach((row) => {
+    const value = String(row["Order ID"] || "");
+
+    const match = value.match(/(\d+)$/);
+
+    if (match) {
+      maxOrder = Math.max(
+        maxOrder,
+        parseInt(match[1], 10)
+      );
+    }
+  });
+
+  return maxOrder + 1;
+}
+
+/*
+ * Ensures token/order allocation is processed
+ * one request at a time within this Node server.
+ */
+let excelAllocationQueue = Promise.resolve();
+
+function withExcelAllocationLock(work) {
+  const result = excelAllocationQueue.then(
+    work,
+    work
+  );
+
+  excelAllocationQueue = result.catch(() => {});
+
+  return result;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /entries
 // ─────────────────────────────────────────────────────────────────────────────
@@ -877,35 +956,15 @@ app.get("/test", (req, res) => {
 // Start server
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.listen(
-  4000,
-  () => {
+const PORT = process.env.PORT || 4000;
 
-    console.log(
-      "=============================================="
-    );
-
-    console.log(
-      "✅ SVARA Token Server is running"
-    );
-
-    console.log(
-      "🌐 http://localhost:4000"
-    );
-
-    console.log(
-      `📂 Excel file: ${FILE_PATH}`
-    );
-
-    console.log(
-      `🎟️ Available tokens: ${ALLOWED_TOKEN_TYPES.join(
-        ", "
-      )}`
-    );
-
-    console.log(
-      "=============================================="
-    );
-
-  }
-);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("==============================================");
+  console.log("✅ SVARA Token Server is running");
+  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`📂 Excel file: ${FILE_PATH}`);
+  console.log(
+    `🎟️ Available tokens: ${ALLOWED_TOKEN_TYPES.join(", ")}`
+  );
+  console.log("==============================================");
+});
