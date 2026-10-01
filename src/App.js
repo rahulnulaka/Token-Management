@@ -188,73 +188,73 @@ function getTokenIds(entry) {
 }
 
 
-function nextOrderNumber(entries) {
-  let max = 0;
+// function nextOrderNumber(entries) {
+//   let max = 0;
 
-  entries.forEach((entry) => {
-    const value = String(entry.orderId || "");
-    const match = value.match(/(\d+)$/);
+//   entries.forEach((entry) => {
+//     const value = String(entry.orderId || "");
+//     const match = value.match(/(\d+)$/);
 
-    if (match) {
-      max = Math.max(max, parseInt(match[1], 10));
-    }
-  });
+//     if (match) {
+//       max = Math.max(max, parseInt(match[1], 10));
+//     }
+//   });
 
-  return max + 1;
-}
+//   return max + 1;
+// }
 
 
 /* =========================================================
    EXCEL EXPORT
 ========================================================= */
 
-function exportToExcel(entries) {
-  if (!entries.length) return;
+// function exportToExcel(entries) {
+//   if (!entries.length) return;
 
-  const rows = entries.map((entry) => ({
-    "Order ID": entry.orderId || "",
-    "Token Type": entry.tokenType || "",
-    Quantity: entry.quantity || "",
-    "Token Start": entry.tokenStart || "",
-    "Token End": entry.tokenEnd || "",
-    Name: entry.name || "",
-    Email: entry.email || "",
-    Phone: entry.phone || "",
-    "Payment Mode": entry.payment || "",
-    Date: entry.date || "",
-    Time: entry.time || "",
-  }));
+//   const rows = entries.map((entry) => ({
+//     "Order ID": entry.orderId || "",
+//     "Token Type": entry.tokenType || "",
+//     Quantity: entry.quantity || "",
+//     "Token Start": entry.tokenStart || "",
+//     "Token End": entry.tokenEnd || "",
+//     Name: entry.name || "",
+//     Email: entry.email || "",
+//     Phone: entry.phone || "",
+//     "Payment Mode": entry.payment || "",
+//     Date: entry.date || "",
+//     Time: entry.time || "",
+//   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+//   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  worksheet["!cols"] = [
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 24 },
-    { wch: 28 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 14 },
-    { wch: 12 },
-  ];
+//   worksheet["!cols"] = [
+//     { wch: 14 },
+//     { wch: 14 },
+//     { wch: 10 },
+//     { wch: 14 },
+//     { wch: 14 },
+//     { wch: 24 },
+//     { wch: 28 },
+//     { wch: 18 },
+//     { wch: 16 },
+//     { wch: 14 },
+//     { wch: 12 },
+//   ];
 
-  const workbook = XLSX.utils.book_new();
+//   const workbook = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    worksheet,
-    "Registrations"
-  );
+//   XLSX.utils.book_append_sheet(
+//     workbook,
+//     worksheet,
+//     "Registrations"
+//   );
 
-  try {
-    XLSX.writeFile(workbook, "SVARA-Registrations.xlsx");
-  } catch (error) {
-    alert("Excel file is open. Please close it before exporting.");
-  }
-}
+//   try {
+//     XLSX.writeFile(workbook, "SVARA-Registrations.xlsx");
+//   } catch (error) {
+//     alert("Excel file is open. Please close it before exporting.");
+//   }
+// }
 
 
 /* =========================================================
