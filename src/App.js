@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 
 const API =
   process.env.REACT_APP_API_URL ||
@@ -153,7 +152,6 @@ function downloadCentralExcel() {
  * It looks at the highest existing token number for that category.
  */
 function nextTokenSerial(entries, type) {
-  const config = getTokenConfig(type);
 
   let maxSerial = 0;
 
