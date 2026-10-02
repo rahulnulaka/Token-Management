@@ -19,7 +19,6 @@ const TOKEN_TYPES = {
     icon: "🏍️",
     accent: "#7c3aed",
     light: "#f5f3ff",
-    price: 301,
   },
 
   Saree: {
@@ -28,7 +27,6 @@ const TOKEN_TYPES = {
     icon: "🥻",
     accent: "#db2777",
     light: "#fdf2f8",
-    price: 101,
   },
 
   Silver: {
@@ -37,7 +35,6 @@ const TOKEN_TYPES = {
     icon: "🥈",
     accent: "#475569",
     light: "#f8fafc",
-    price: 201,
   },
 };
 
@@ -198,19 +195,6 @@ function getTokenConfig(type) {
   return TOKEN_TYPES[type] || TOKEN_TYPES.Bullet;
 }
 
-function getEntryAmount(entry) {
-  const amount = Number(entry?.amount);
-
-  if (Number.isFinite(amount)) {
-    return amount;
-  }
-
-  const quantity = Number(entry?.quantity) || 0;
-  const price = Number(getTokenConfig(entry?.tokenType).price) || 0;
-
-  return price * quantity;
-}
-
 
 function makeTokenId(type, serial) {
   const config = getTokenConfig(type);
@@ -326,20 +310,31 @@ async function clearEntries(adminToken) {
 }
 
 
-async function updateEntryStatus(
-  orderId,
-  status
-) {
-  const result = await adminFetch(
-    `/entries/${encodeURIComponent(orderId)}/status`,
-    {
-      method: "POST",
-      body: JSON.stringify({ status }),
-    }
-  );
-
-  return result.entry || result;
+async function updateEntryStatus(orderId, status) {
+  const adminToken = sessionStorage.getItem("svara_admin_token");
+  const headers = { "Content-Type": "application/json" };
+  if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
+  const res = await fetch(`${API}/entries/${encodeURIComponent(orderId)}/status`, {
+    method: "POST", headers, body: JSON.stringify({ status }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || "Unable to update status.");
+  return payload.entry;
 }
+
+async function adminCancelEntry(orderId) {
+  const adminToken = sessionStorage.getItem("svara_admin_token");
+  if (!adminToken) throw new Error("Admin login required.");
+  const res = await fetch(`${API}/entries/${encodeURIComponent(orderId)}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || "Unable to cancel token.");
+  return payload.entry;
+}
+
 
 async function loadAdminData() {
   return adminFetch(
@@ -1415,7 +1410,7 @@ function SuccessModal({
 
           <div style={successRow}>
             <span>Amount</span>
-            <strong>₹{getEntryAmount(entry).toFixed(2)}</strong>
+            <strong>₹{Number(entry.amount || 0).toFixed(2)}</strong>
           </div>
 
 
@@ -2944,7 +2939,7 @@ function Dashboard({
 
 
                           <td style={tableCell}>
-                            ₹{getEntryAmount(entry).toFixed(2)}
+                            ₹{Number(entry.amount || 0).toFixed(2)}
                           </td>
 
 
@@ -3161,6 +3156,7 @@ function AdminReceived({
   onLogout,
   onCreate,
   onStatusChange,
+  onCancelAdmin,
 }) {
   const [filter, setFilter] = useState("all");
 
@@ -3282,9 +3278,9 @@ function AdminReceived({
         >
           <StatCard
             label="TOTAL AMOUNT RECEIVED"
-            value={`₹${Number.isFinite(Number(adminSummary?.totalAmountReceived))
-              ? Number(adminSummary.totalAmountReceived).toFixed(2)
-              : "0.00"}`}
+            value={`₹${Number(
+              adminSummary?.totalAmountReceived || 0
+            ).toFixed(2)}`}
             icon="💰"
           />
 
@@ -3344,25 +3340,25 @@ function AdminReceived({
         >
           <StatCard
             label="BULLET AMOUNT RECEIVED"
-            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Bullet))
-              ? Number(adminSummary.amountReceivedByCategory.Bullet).toFixed(2)
-              : "0.00"}`}
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Bullet || 0
+            ).toFixed(2)}`}
             icon="🎯"
           />
 
           <StatCard
             label="SAREE AMOUNT RECEIVED"
-            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Saree))
-              ? Number(adminSummary.amountReceivedByCategory.Saree).toFixed(2)
-              : "0.00"}`}
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Saree || 0
+            ).toFixed(2)}`}
             icon="🥻"
           />
 
           <StatCard
             label="SILVER AMOUNT RECEIVED"
-            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Silver))
-              ? Number(adminSummary.amountReceivedByCategory.Silver).toFixed(2)
-              : "0.00"}`}
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Silver || 0
+            ).toFixed(2)}`}
             icon="🥈"
           />
         </div>
@@ -3669,6 +3665,18 @@ function AdminReceived({
                             Payment Not Received
                           </option>
                         </select>
+
+                        <button
+                          onClick={() => onCancelAdmin(entry)}
+                          disabled={entry.status === "Cancelled"}
+                          style={{
+                            marginLeft: 6, border: "1px solid #fecaca", borderRadius: 8,
+                            padding: "6px 8px", fontSize: 11, background: "#fef2f2",
+                            color: "#b91c1c", cursor: entry.status === "Cancelled" ? "not-allowed" : "pointer",
+                            opacity: entry.status === "Cancelled" ? 0.5 : 1,
+                          }}
+                        >Cancel</button>
+
                       </td>
 
                       <td style={tableCell}>
@@ -4335,6 +4343,10 @@ async function handleStatusChange(
           : item
       )
     );
+
+    if (sessionStorage.getItem("svara_admin_token")) {
+      await refreshAdmin();
+    }
   } catch (error) {
     alert(
       error.message ||
@@ -4383,6 +4395,20 @@ async function handleAdminClear() {
     );
   }
 }
+
+async function handleAdminCancel(entry) {
+  const tokenText = entry.tokenEnd && entry.tokenEnd !== entry.tokenStart
+    ? `${entry.tokenStart} – ${entry.tokenEnd}` : entry.tokenStart;
+  if (!window.confirm(`Cancel token ${tokenText}?\n\nAdmin cancellation does not require the cancellation password.`)) return;
+  try {
+    const updatedEntry = await adminCancelEntry(entry.orderId);
+    setEntries((current) => current.map((item) => item.orderId === updatedEntry.orderId ? updatedEntry : item));
+    await refreshAdmin();
+  } catch (error) {
+    alert(error.message || "Unable to cancel token.");
+  }
+}
+
 
 async function handleCancel(entry, password) {
   const updatedEntry = await cancelEntry(
@@ -4636,6 +4662,10 @@ alert(
 
     onStatusChange={
       handleStatusChange
+    }
+
+    onCancelAdmin={
+      handleAdminCancel
     }
   />
 

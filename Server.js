@@ -295,28 +295,6 @@ function normalizeRow(row = {}) {
 
 
 
-function parseEntryAmount(row, tokenType, quantity) {
-
-  const raw = row?.Amount;
-
-  const numeric =
-    typeof raw === "number"
-      ? raw
-      : Number(String(raw ?? "").replace(/[₹,\s]/g, ""));
-
-  if (Number.isFinite(numeric) && numeric > 0) {
-    return numeric;
-  }
-
-  const fallbackPrices = {
-    Bullet: 301,
-    Saree: 101,
-    Silver: 201,
-  };
-
-  return (fallbackPrices[tokenType] || 0) * (Number(quantity) || 0);
-}
-
 function toClientEntry(row) {
 
   const r = normalizeRow(row);
@@ -343,7 +321,7 @@ function toClientEntry(row) {
 
     payment: String(r.Payment || ""),
 
-    amount: parseEntryAmount(r, String(r["Token Type"] || ""), r.Quantity),
+    amount: Number(r.Amount) || 0,
 
     date: String(r.Date || ""),
 
@@ -1638,8 +1616,6 @@ app.post(
 
   "/entries/:orderId/status",
 
-  requireAdmin,
-
   async (req, res) => {
 
     try {
@@ -1902,54 +1878,83 @@ app.post(
 
 
 
-      const configuredCancelPassword =
+      // Admin users can cancel directly from Admin Received.
+      // Public users must provide the separate cancellation password.
+      const header =
 
-        process.env.CANCEL_PASSWORD || "";
+        String(
+
+          req.headers.authorization ||
+
+            ""
+
+        );
+
+      const adminToken =
+
+        header.startsWith("Bearer ")
+
+          ? header.slice(7)
+
+          : "";
+
+      const isAdmin =
+
+        verifyAdminToken(adminToken);
 
 
 
-      if (!configuredCancelPassword) {
+      if (!isAdmin) {
 
-        return res
+        const configuredCancelPassword =
 
-          .status(500)
+          process.env.CANCEL_PASSWORD || "";
 
-          .json({
 
-            error:
 
-              "Cancellation password is not configured on the server.",
+        if (!configuredCancelPassword) {
 
-          });
+          return res
+
+            .status(500)
+
+            .json({
+
+              error:
+
+                "Cancellation password is not configured on the server.",
+
+            });
+
+        }
+
+
+
+        if (
+
+          !cancelPassword ||
+
+          cancelPassword !==
+
+            configuredCancelPassword
+
+        ) {
+
+          return res
+
+            .status(401)
+
+            .json({
+
+              error:
+
+                "Invalid cancellation password.",
+
+            });
+
+        }
 
       }
-
-
-
-      if (
-
-        !cancelPassword ||
-
-        cancelPassword !==
-
-          configuredCancelPassword
-
-      ) {
-
-        return res
-
-          .status(401)
-
-          .json({
-
-            error:
-
-              "Invalid cancellation password.",
-
-          });
-
-      }
-
 
 
       const updated =
