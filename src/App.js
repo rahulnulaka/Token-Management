@@ -19,7 +19,6 @@ const TOKEN_TYPES = {
     icon: "🏍️",
     accent: "#7c3aed",
     light: "#f5f3ff",
-    price: 301,
   },
 
   Saree: {
@@ -28,7 +27,6 @@ const TOKEN_TYPES = {
     icon: "🥻",
     accent: "#db2777",
     light: "#fdf2f8",
-    price: 101,
   },
 
   Silver: {
@@ -37,7 +35,6 @@ const TOKEN_TYPES = {
     icon: "🥈",
     accent: "#475569",
     light: "#f8fafc",
-    price: 201,
   },
 };
 
@@ -90,7 +87,7 @@ async function loadEntries() {
 
 async function cancelEntry(
   orderId,
-  phone
+  password
 ) {
   const res = await fetch(
     `${API}/entries/${encodeURIComponent(
@@ -103,7 +100,7 @@ async function cancelEntry(
           "application/json",
       },
       body: JSON.stringify({
-        phone,
+        cancelPassword: password,
       }),
     }
   );
@@ -1510,7 +1507,7 @@ function FormScreen({
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
 
   const [errors, setErrors] = useState({});
   const [showPayment, setShowPayment] = useState(false);
@@ -3104,13 +3101,28 @@ function StatCard({
   label,
   value,
   icon,
+  onClick,
+  active = false,
 }) {
   return (
     <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         padding: "12px 14px",
         borderRadius: 15,
-        background: "#f8fafc",
+        background: active ? "#eef2ff" : "#f8fafc",
+        border: active
+          ? "1px solid #c4b5fd"
+          : "1px solid transparent",
+        cursor: onClick ? "pointer" : "default",
       }}
     >
 
@@ -3153,7 +3165,23 @@ function AdminReceived({
   onClear,
   onLogout,
   onCreate,
+  onStatusChange,
 }) {
+  const [filter, setFilter] = useState("all");
+
+  const filteredAdminEntries =
+    (adminEntries || []).filter((entry) => {
+      if (filter === "payment") {
+        return entry.status === "Payment Not Received";
+      }
+
+      if (filter === "cancelled") {
+        return entry.status === "Cancelled";
+      }
+
+      return true;
+    });
+
   return (
     <div style={S.page}>
       <div
@@ -3271,6 +3299,14 @@ function AdminReceived({
               adminSummary?.cancelledTokens || 0
             }
             icon="❌"
+            onClick={() =>
+              setFilter(
+                filter === "cancelled"
+                  ? "all"
+                  : "cancelled"
+              )
+            }
+            active={filter === "cancelled"}
           />
 
           <StatCard
@@ -3280,6 +3316,14 @@ function AdminReceived({
               0
             }
             icon="⏳"
+            onClick={() =>
+              setFilter(
+                filter === "payment"
+                  ? "all"
+                  : "payment"
+              )
+            }
+            active={filter === "payment"}
           />
 
           <StatCard
@@ -3288,9 +3332,79 @@ function AdminReceived({
               adminSummary?.totalOrders || 0
             }
             icon="📋"
+            onClick={() => setFilter("all")}
+            active={filter === "all"}
           />
         </div>
 
+        <div
+          className="svara-stats-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(3, minmax(0, 1fr))",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <StatCard
+            label="BULLET AMOUNT RECEIVED"
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Bullet || 0
+            ).toFixed(2)}`}
+            icon="🎯"
+          />
+
+          <StatCard
+            label="SAREE AMOUNT RECEIVED"
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Saree || 0
+            ).toFixed(2)}`}
+            icon="🥻"
+          />
+
+          <StatCard
+            label="SILVER AMOUNT RECEIVED"
+            value={`₹${Number(
+              adminSummary?.amountReceivedByCategory?.Silver || 0
+            ).toFixed(2)}`}
+            icon="🥈"
+          />
+        </div>
+
+        {filter !== "all" && (
+          <div
+            style={{
+              marginBottom: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              fontSize: 13,
+              color: "#475569",
+            }}
+          >
+            <strong>
+              Showing only{" "}
+              {filter === "payment"
+                ? "Payment Not Received"
+                : "Cancelled"}{" "}
+              records ({filteredAdminEntries.length})
+            </strong>
+
+            <button
+              onClick={() => setFilter("all")}
+              style={{
+                ...S.button,
+                padding: "7px 10px",
+                background: "#f1f5f9",
+                color: "#334155",
+              }}
+            >
+              Show All
+            </button>
+          </div>
+        )}
 
         <div
           className="svara-card"
@@ -3474,7 +3588,7 @@ function AdminReceived({
                 </thead>
 
                 <tbody>
-                  {adminEntries.map((entry) => (
+                  {filteredAdminEntries.map((entry) => (
                     <tr
                       key={entry.orderId}
                       style={{
@@ -3523,7 +3637,43 @@ function AdminReceived({
                       </td>
 
                       <td style={tableCell}>
-                        {entry.status}
+                        <select
+                          value={
+                            entry.status === "Payment Not Received"
+                              ? "Payment Not Received"
+                              : entry.status === "Cancelled"
+                              ? "Cancelled"
+                              : "Complete"
+                          }
+                          disabled={entry.status === "Cancelled"}
+                          onChange={(e) =>
+                            onStatusChange(
+                              entry,
+                              e.target.value
+                            )
+                          }
+                          style={{
+                            border: "1px solid #d1d5db",
+                            borderRadius: 8,
+                            padding: "6px 8px",
+                            fontSize: 11,
+                            background:
+                              entry.status === "Cancelled"
+                                ? "#fef2f2"
+                                : "#fff",
+                            color:
+                              entry.status === "Cancelled"
+                                ? "#b91c1c"
+                                : "#334155",
+                          }}
+                        >
+                          <option value="Complete">
+                            Complete
+                          </option>
+                          <option value="Payment Not Received">
+                            Payment Not Received
+                          </option>
+                        </select>
                       </td>
 
                       <td style={tableCell}>
@@ -3751,8 +3901,8 @@ function CancelTokenModal({ entry, onCancel, onConfirm }) {
   const [loading, setLoading] = useState(false);
 
   async function handleCancel() {
-    if (!phone.trim()) {
-      setError("Please enter the phone number.");
+    if (!password) {
+      setError("Please enter the cancellation password.");
       return;
     }
 
@@ -3760,7 +3910,7 @@ function CancelTokenModal({ entry, onCancel, onConfirm }) {
       setLoading(true);
       setError("");
 
-      await onConfirm(phone.trim());
+      await onConfirm(password);
     } catch (error) {
       setError(error.message || "Unable to cancel token.");
     } finally {
@@ -3794,7 +3944,7 @@ function CancelTokenModal({ entry, onCancel, onConfirm }) {
             lineHeight: 1.5,
           }}
         >
-          Enter the customer's phone number to confirm cancellation.
+          Enter the cancellation password to confirm this cancellation.
         </p>
 
         <div
@@ -3831,13 +3981,14 @@ function CancelTokenModal({ entry, onCancel, onConfirm }) {
         </div>
 
         <label style={S.label}>
-          Customer Phone Number
+          Cancellation Password
         </label>
 
         <input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="Enter phone number"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter cancellation password"
+          type="password"
           autoFocus
           style={S.input}
         />
@@ -4180,6 +4331,15 @@ async function handleStatusChange(
           : item
       )
     );
+
+    setAdminEntries((current) =>
+      current.map((item) =>
+        item.orderId ===
+        updatedEntry.orderId
+          ? updatedEntry
+          : item
+      )
+    );
   } catch (error) {
     alert(
       error.message ||
@@ -4229,10 +4389,10 @@ async function handleAdminClear() {
   }
 }
 
-async function handleCancel(entry, phone) {
+async function handleCancel(entry, password) {
   const updatedEntry = await cancelEntry(
     entry.orderId,
-    phone
+    password
   );
 
   setEntries((current) =>
@@ -4406,10 +4566,10 @@ alert(
         onCancel={() =>
           setCancelTarget(null)
         }
-        onConfirm={(phone) =>
+        onConfirm={(password) =>
           handleCancel(
             cancelTarget,
-            phone
+            password
           )
         }
       />
@@ -4478,6 +4638,10 @@ alert(
       setAdminCreate(true);
       setScreen("admin-create");
     }}
+
+    onStatusChange={
+      handleStatusChange
+    }
   />
 
 ) : screen === "admin-create" ? (

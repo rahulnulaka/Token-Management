@@ -1058,12 +1058,19 @@ const ADMIN_TOKEN_SECRET =
 
 
 function base64url(value) {
+
   return Buffer
+
     .from(value)
+
     .toString("base64")
+
     .replace(/=/g, "")
+
     .replace(/\+/g, "-")
+
     .replace(/\//g, "_");
+
 }
 
 
@@ -1859,29 +1866,61 @@ app.post(
 
 
 
-      const phone =
+      const cancelPassword =
 
         String(
 
-          req.body?.phone ||
+          req.body?.cancelPassword ||
 
             ""
 
-        ).trim();
+        );
 
 
 
-      if (!phone) {
+      const configuredCancelPassword =
+
+        process.env.CANCEL_PASSWORD || "";
+
+
+
+      if (!configuredCancelPassword) {
 
         return res
 
-          .status(400)
+          .status(500)
 
           .json({
 
             error:
 
-              "Phone number is required.",
+              "Cancellation password is not configured on the server.",
+
+          });
+
+      }
+
+
+
+      if (
+
+        !cancelPassword ||
+
+        cancelPassword !==
+
+          configuredCancelPassword
+
+      ) {
+
+        return res
+
+          .status(401)
+
+          .json({
+
+            error:
+
+              "Invalid cancellation password.",
 
           });
 
@@ -1968,36 +2007,6 @@ app.post(
                 {
 
                   statusCode: 400,
-
-                }
-
-              );
-
-            }
-
-
-
-            if (
-
-              String(
-
-                row.Phone
-
-              ).trim() !== phone
-
-            ) {
-
-              throw Object.assign(
-
-                new Error(
-
-                  "Phone number does not match this registration."
-
-                ),
-
-                {
-
-                  statusCode: 401,
 
                 }
 
@@ -2138,6 +2147,7 @@ app.post(
     const expectedPassword =
 
       process.env.ADMIN_PASSWORD;
+
 
 
 
@@ -2295,13 +2305,41 @@ app.get(
 
 
 
-              acc.totalAmountReceived +=
+              const amount =
 
                 Number(
 
                   e.amount
 
                 ) || 0;
+
+
+
+              acc.totalAmountReceived +=
+
+                amount;
+
+
+
+              if (
+
+                Object.prototype.hasOwnProperty.call(
+
+                  acc.amountReceivedByCategory,
+
+                  e.tokenType
+
+                )
+
+              ) {
+
+                acc.amountReceivedByCategory[
+
+                  e.tokenType
+
+                ] += amount;
+
+              }
 
             } else if (
 
@@ -2374,6 +2412,20 @@ app.get(
 
 
             totalAmountReceived: 0,
+
+
+
+            amountReceivedByCategory: {
+
+              Bullet: 0,
+
+              Saree: 0,
+
+              Silver: 0,
+
+            },
+
+
 
           }
 
