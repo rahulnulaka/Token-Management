@@ -3791,6 +3791,7 @@ function AdminReceived({
                     );
                   })}
                 </tbody>
+              </table>
             </div>
           )}
 
