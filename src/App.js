@@ -53,37 +53,37 @@ async function loadEntries() {
   return await res.json();
 }
 
-async function clearEntries(
-  username,
-  password
-) {
-  const res = await fetch(
-    `${API}/admin/clear`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify({
-        username,
-        password,
-      }),
-    }
-  );
+// async function clearEntries(
+//   username,
+//   password
+// ) {
+//   const res = await fetch(
+//     `${API}/admin/clear`,
+//     {
+//       method: "POST",
+//       headers: {
+//         "Content-Type":
+//           "application/json",
+//       },
+//       body: JSON.stringify({
+//         username,
+//         password,
+//       }),
+//     }
+//   );
 
-  const payload =
-    await res.json().catch(() => ({}));
+//   const payload =
+//     await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    throw new Error(
-      payload.error ||
-        "Unable to clear registrations."
-    );
-  }
+//   if (!res.ok) {
+//     throw new Error(
+//       payload.error ||
+//         "Unable to clear registrations."
+//     );
+//   }
 
-  return payload;
-}
+//   return payload;
+// }
 
 async function cancelEntry(
   orderId,
@@ -200,15 +200,234 @@ function getSerialFromToken(token) {
   return match ? parseInt(match[1], 10) : 0;
 }
 
-function downloadCentralExcel() {
+// function downloadCentralExcel() {
 
-  window.open(
-    `${API}/download-excel`,
-    "_blank"
-  );
+//   window.open(
+//     `${API}/download-excel`,
+//     "_blank"
+//   );
 
+// }
+async function adminLogin(username, password) {
+  const res = await fetch(`${API}/admin/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      username,
+      password,
+    }),
+  });
+
+  const payload = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error || "Invalid admin credentials."
+    );
+  }
+
+  return payload;
 }
 
+
+async function adminFetch(path, options = {}) {
+  const token =
+    sessionStorage.getItem("svara_admin_token");
+
+  const res = await fetch(`${API}${path}`, {
+    ...options,
+
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token || ""}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const payload =
+    await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    sessionStorage.removeItem(
+      "svara_admin_token"
+    );
+
+    throw new Error(
+      "Admin session expired. Please log in again."
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error ||
+        "Admin request failed."
+    );
+  }
+
+  return payload;
+}
+
+
+async function clearEntries(adminToken) {
+  const res = await fetch(
+    `${API}/admin/clear`,
+    {
+      method: "POST",
+
+      headers: {
+        Authorization:
+          `Bearer ${adminToken || ""}`,
+        "Content-Type":
+          "application/json",
+      },
+    }
+  );
+
+  const payload =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error ||
+        "Unable to clear registrations."
+    );
+  }
+
+  return payload;
+}
+
+
+async function updateEntryStatus(
+  orderId,
+  status
+) {
+  const res = await fetch(
+    `${API}/entries/${encodeURIComponent(
+      orderId
+    )}/status`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        status,
+      }),
+    }
+  );
+
+  const payload =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error ||
+        "Unable to update status."
+    );
+  }
+
+  return payload.entry;
+}
+
+
+async function loadAdminData() {
+  return adminFetch(
+    "/admin/received"
+  );
+}
+
+
+async function saveAdminNotes(
+  orderId,
+  notes
+) {
+  return adminFetch(
+    `/admin/notes/${encodeURIComponent(
+      orderId
+    )}`,
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        notes,
+      }),
+    }
+  );
+}
+
+
+function downloadAdminExcel() {
+  const token =
+    sessionStorage.getItem(
+      "svara_admin_token"
+    );
+
+  if (!token) {
+    alert("Admin login required.");
+    return;
+  }
+
+  fetch(
+    `${API}/admin/download-excel`,
+    {
+      headers: {
+        Authorization:
+          `Bearer ${token}`,
+      },
+    }
+  )
+    .then(async (res) => {
+      if (!res.ok) {
+        const payload =
+          await res
+            .json()
+            .catch(() => ({}));
+
+        throw new Error(
+          payload.error ||
+            "Unable to download Excel."
+        );
+      }
+
+      return res.blob();
+    })
+    .then((blob) => {
+      const blobUrl =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = blobUrl;
+      link.download =
+        "svara-token-registrations.xlsx";
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      setTimeout(
+        () =>
+          URL.revokeObjectURL(
+            blobUrl
+          ),
+        1000
+      );
+    })
+    .catch((error) => {
+      alert(
+        error.message ||
+          "Unable to download Excel."
+      );
+    });
+}
 
 /*
  * IMPORTANT:
@@ -1291,6 +1510,7 @@ function FormScreen({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [amount, setAmount] = useState("");
 
   const [errors, setErrors] = useState({});
   const [showPayment, setShowPayment] = useState(false);
@@ -1362,6 +1582,15 @@ const previewEnd = makeTokenId(
         "Enter a valid phone number.";
     }
 
+    if (
+  amount === "" ||
+  !Number.isFinite(Number(amount)) ||
+  Number(amount) < 0
+) {
+  validationErrors.amount =
+    "Enter a valid amount.";
+}
+
     setErrors(validationErrors);
 
     return (
@@ -1415,7 +1644,7 @@ function handlePayment(mode) {
 
     payment:
       mode,
-
+    amount: Number(amount),
   };
 
 
@@ -1731,7 +1960,43 @@ function handlePayment(mode) {
               )}
 
             </div>
+            
+            {/* AMOUNT */}
 
+<div style={{ marginBottom: 18 }}>
+
+  <label style={S.label}>
+    Amount{" "}
+    <span style={{ color: "#ef4444" }}>
+      *
+    </span>
+  </label>
+
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    inputMode="decimal"
+    value={amount}
+    onChange={(e) =>
+      setAmount(e.target.value)
+    }
+    placeholder="Enter amount"
+    style={{
+      ...S.input,
+      borderColor: errors.amount
+        ? "#ef4444"
+        : "#d1d5db",
+    }}
+  />
+
+  {errors.amount && (
+    <div style={S.error}>
+      {errors.amount}
+    </div>
+  )}
+
+</div>
 
             {/* QUANTITY */}
 
@@ -2009,9 +2274,11 @@ const previewRow = {
 function Dashboard({
   entries,
   onSelect,
-  onExport,
   onClear,
   onCancel,
+  onStatusChange,
+  onReprint,
+  onAdmin,
 }) {
   const counts = {
     Bullet: 0,
@@ -2409,22 +2676,16 @@ function Dashboard({
             >
 
               <button
-                onClick={onExport}
-                disabled={!entries.length}
-                style={{
-                  ...S.button,
-                  padding:
-                    "9px 13px",
-                  background: "#ecfdf5",
-                  color: "#047857",
-                  opacity:
-                    entries.length
-                      ? 1
-                      : 0.5,
-                }}
-              >
-                📊 Export
-              </button>
+  onClick={onAdmin}
+  style={{
+    ...S.button,
+    padding: "9px 13px",
+    background: "#111827",
+    color: "#fff",
+  }}
+>
+  🔐 Admin Received
+</button>
 
 
               <button
@@ -2519,37 +2780,16 @@ function Dashboard({
                     }}
                   >
 
-                    <th style={tableHeader}>
-                      TOKEN
-                    </th>
-
-                    <th style={tableHeader}>
-                      CATEGORY
-                    </th>
-
-                    <th style={tableHeader}>
-                      CUSTOMER
-                    </th>
-
-                    <th style={tableHeader}>
-                      PHONE
-                    </th>
-
-                    <th style={tableHeader}>
-                      QTY
-                    </th>
-
-                    <th style={tableHeader}>
-                      PAYMENT
-                    </th>
-
-                    <th style={tableHeader}>
-                      DATE
-                    </th>
-
-                    <th style={tableHeader}>
-                      ACTION
-                    </th>
+                    <th style={tableHeader}>TOKEN</th>
+<th style={tableHeader}>CATEGORY</th>
+<th style={tableHeader}>CUSTOMER</th>
+<th style={tableHeader}>PHONE</th>
+<th style={tableHeader}>QTY</th>
+<th style={tableHeader}>AMOUNT</th>
+<th style={tableHeader}>PAYMENT</th>
+<th style={tableHeader}>STATUS</th>
+<th style={tableHeader}>DATE</th>
+<th style={tableHeader}>ACTION</th>
 
                   </tr>
 
@@ -2613,7 +2853,6 @@ function Dashboard({
 
                           </td>
 
-
                           <td style={tableCell}>
 
                             <span
@@ -2669,8 +2908,39 @@ function Dashboard({
 
 
                           <td style={tableCell}>
+                            ₹{Number(entry.amount || 0).toFixed(2)}
+                          </td>
+
+
+                          <td style={tableCell}>
                             {entry.payment}
                           </td>
+
+                          <td style={tableCell}>
+  <span
+    style={{
+      display: "inline-flex",
+      padding: "5px 9px",
+      borderRadius: 8,
+      fontSize: 10,
+      fontWeight: 800,
+      background:
+        entry.status === "Cancelled"
+          ? "#fef2f2"
+          : entry.status === "Payment Not Received"
+          ? "#fff7ed"
+          : "#ecfdf5",
+      color:
+        entry.status === "Cancelled"
+          ? "#b91c1c"
+          : entry.status === "Payment Not Received"
+          ? "#c2410c"
+          : "#047857",
+    }}
+  >
+    {entry.status || "Complete"}
+  </span>
+</td>
 
 
                           <td style={tableCell}>
@@ -2678,35 +2948,88 @@ function Dashboard({
                           </td>
 
                           <td style={tableCell}>
-  {String(entry.status || "Active").toLowerCase() ===
-  "cancelled" ? (
-    <span
-      style={{
-        display: "inline-flex",
-        padding: "5px 8px",
-        borderRadius: 8,
-        fontSize: 10,
-        fontWeight: 800,
-        background: "#fef2f2",
-        color: "#b91c1c",
-      }}
-    >
-      CANCELLED
-    </span>
-  ) : (
+  <div
+    style={{
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap",
+    }}
+  >
+    {String(entry.status || "Complete").toLowerCase() !==
+      "cancelled" && (
+      <select
+        value={
+          entry.status === "Payment Not Received"
+            ? "Payment Not Received"
+            : "Complete"
+        }
+        onChange={(e) =>
+          onStatusChange(
+            entry,
+            e.target.value
+          )
+        }
+        style={{
+          border: "1px solid #d1d5db",
+          borderRadius: 8,
+          padding: "6px 8px",
+          fontSize: 11,
+          background: "#fff",
+        }}
+      >
+        <option value="Complete">
+          Complete
+        </option>
+
+        <option value="Payment Not Received">
+          Payment Not Received
+        </option>
+      </select>
+    )}
+
     <button
-      onClick={() => onCancel(entry)}
+      onClick={() => onReprint(entry)}
       style={{
         ...S.button,
         padding: "7px 10px",
-        background: "#fef2f2",
-        color: "#b91c1c",
+        background: "#111827",
+        color: "#fff",
         fontSize: 11,
       }}
     >
-      Cancel
+      🖨️ Reprint
     </button>
-  )}
+
+    {String(entry.status || "Complete").toLowerCase() ===
+    "cancelled" ? (
+      <span
+        style={{
+          display: "inline-flex",
+          padding: "5px 8px",
+          borderRadius: 8,
+          fontSize: 10,
+          fontWeight: 800,
+          background: "#fef2f2",
+          color: "#b91c1c",
+        }}
+      >
+        CANCELLED
+      </span>
+    ) : (
+      <button
+        onClick={() => onCancel(entry)}
+        style={{
+          ...S.button,
+          padding: "7px 10px",
+          background: "#fef2f2",
+          color: "#b91c1c",
+          fontSize: 11,
+        }}
+      >
+        Cancel
+      </button>
+    )}
+  </div>
 </td>
 
                         </tr>
@@ -2777,6 +3100,412 @@ function StatCard({
   );
 }
 
+function AdminReceived({
+  adminEntries,
+  adminSummary,
+  onBack,
+  onRefresh,
+  onDownload,
+  onClear,
+  onLogout,
+}) {
+  return (
+    <div style={S.page}>
+      <div
+        className="svara-container"
+        style={S.container}
+      >
+
+        <div
+          className="svara-topbar"
+          style={S.topBar}
+        >
+          <button
+            onClick={onBack}
+            style={{
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              color: "#64748b",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            ← Dashboard
+          </button>
+
+          <div style={S.logo}>
+            <div style={S.logoMark}>
+              S
+            </div>
+
+            <div>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 17,
+                  letterSpacing: 1,
+                }}
+              >
+                SVARA
+              </div>
+
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  letterSpacing: 1,
+                }}
+              >
+                ADMIN RECEIVED
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <div
+          style={{
+            marginBottom: 22,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#7c3aed",
+              letterSpacing: 1.5,
+            }}
+          >
+            ADMIN DASHBOARD
+          </div>
+
+          <h1
+            style={{
+              margin: "5px 0",
+              fontSize: 32,
+              fontWeight: 900,
+            }}
+          >
+            Admin Received
+          </h1>
+
+          <p
+            style={{
+              color: "#64748b",
+              fontSize: 14,
+              margin: 0,
+            }}
+          >
+            Payment and token administration
+          </p>
+        </div>
+
+
+        <div
+          className="svara-stats-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(4, minmax(0, 1fr))",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <StatCard
+            label="TOTAL AMOUNT RECEIVED"
+            value={`₹${Number(
+              adminSummary?.totalAmountReceived || 0
+            ).toFixed(2)}`}
+            icon="💰"
+          />
+
+          <StatCard
+            label="CANCELLED TOKENS"
+            value={
+              adminSummary?.cancelledTokens || 0
+            }
+            icon="❌"
+          />
+
+          <StatCard
+            label="PAYMENT NOT RECEIVED"
+            value={
+              adminSummary?.paymentNotReceivedTokens ||
+              0
+            }
+            icon="⏳"
+          />
+
+          <StatCard
+            label="TOTAL ORDERS"
+            value={
+              adminSummary?.totalOrders || 0
+            }
+            icon="📋"
+          />
+        </div>
+
+
+        <div
+          className="svara-card"
+          style={{
+            ...S.card,
+            overflow: "hidden",
+          }}
+        >
+
+          <div
+            className="svara-dashboard-header"
+            style={{
+              padding: "18px 22px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom:
+                "1px solid #eef2f7",
+            }}
+          >
+
+            <div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                }}
+              >
+                Registration Details
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  marginTop: 3,
+                }}
+              >
+                Admin-only information
+              </div>
+            </div>
+
+
+            <div
+              className="svara-dashboard-actions"
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+
+              <button
+                onClick={onRefresh}
+                style={{
+                  ...S.button,
+                  padding: "9px 13px",
+                  background: "#f1f5f9",
+                  color: "#334155",
+                }}
+              >
+                🔄 Refresh
+              </button>
+
+              <button
+                onClick={onDownload}
+                style={{
+                  ...S.button,
+                  padding: "9px 13px",
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                📥 Download Excel
+              </button>
+
+              <button
+                onClick={onClear}
+                style={{
+                  ...S.button,
+                  padding: "9px 13px",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                }}
+              >
+                Clear All
+              </button>
+
+              <button
+                onClick={onLogout}
+                style={{
+                  ...S.button,
+                  padding: "9px 13px",
+                  background: "#f3f4f6",
+                  color: "#374151",
+                }}
+              >
+                Logout
+              </button>
+
+            </div>
+          </div>
+
+
+          {!adminEntries?.length ? (
+            <div
+              style={{
+                padding: 45,
+                textAlign: "center",
+                color: "#94a3b8",
+              }}
+            >
+              No registrations found.
+            </div>
+          ) : (
+            <div
+              className="svara-dashboard-table"
+              style={{
+                overflowX: "auto",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 13,
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: "#f8fafc",
+                      color: "#64748b",
+                      fontSize: 10,
+                      letterSpacing: ".8px",
+                    }}
+                  >
+                    <th style={tableHeader}>
+                      TOKEN
+                    </th>
+                    <th style={tableHeader}>
+                      CATEGORY
+                    </th>
+                    <th style={tableHeader}>
+                      CUSTOMER
+                    </th>
+                    <th style={tableHeader}>
+                      PHONE
+                    </th>
+                    <th style={tableHeader}>
+                      QTY
+                    </th>
+                    <th style={tableHeader}>
+                      AMOUNT
+                    </th>
+                    <th style={tableHeader}>
+                      PAYMENT
+                    </th>
+                    <th style={tableHeader}>
+                      STATUS
+                    </th>
+                    <th style={tableHeader}>
+                      DATE
+                    </th>
+                    <th style={tableHeader}>
+                      ADMIN NOTES
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {adminEntries.map((entry) => (
+                    <tr
+                      key={entry.orderId}
+                      style={{
+                        borderTop:
+                          "1px solid #f1f5f9",
+                      }}
+                    >
+                      <td style={tableCell}>
+                        {entry.tokenStart}
+                        {entry.tokenEnd &&
+                        entry.tokenEnd !==
+                          entry.tokenStart
+                          ? ` – ${entry.tokenEnd}`
+                          : ""}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.tokenType}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.name}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.phone}
+                      </td>
+
+                      <td
+                        style={{
+                          ...tableCell,
+                          textAlign: "center",
+                        }}
+                      >
+                        {entry.quantity}
+                      </td>
+
+                      <td style={tableCell}>
+                        ₹{Number(
+                          entry.amount || 0
+                        ).toFixed(2)}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.payment}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.status}
+                      </td>
+
+                      <td style={tableCell}>
+                        {entry.date}
+                      </td>
+
+                      <td style={tableCell}>
+                        <input
+                          defaultValue={
+                            entry.adminNotes || ""
+                          }
+                          onBlur={(e) =>
+                            saveAdminNotes(
+                              entry.orderId,
+                              e.target.value
+                            )
+                          }
+                          placeholder="Add note"
+                          style={{
+                            ...S.input,
+                            minWidth: 160,
+                            padding: "8px 10px",
+                            fontSize: 12,
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+        </div>
+
+      </div>
+    </div>
+  );
+}
 
 /* =========================================================
    COMMON STYLES
@@ -2821,11 +3550,22 @@ function AdminLoginModal({ onClose, onSuccess }) {
       setLoading(true);
       setError("");
 
-      await clearEntries(username.trim(), password);
+      const payload = await adminLogin(
+        username.trim(),
+        password
+      );
+
+      sessionStorage.setItem(
+        "svara_admin_token",
+        payload.token
+      );
 
       onSuccess();
     } catch (error) {
-      setError(error.message || "Invalid admin credentials.");
+      setError(
+        error.message ||
+        "Invalid admin credentials."
+      );
     } finally {
       setLoading(false);
     }
@@ -2857,14 +3597,18 @@ function AdminLoginModal({ onClose, onSuccess }) {
             marginBottom: 22,
           }}
         >
-          Enter admin credentials to clear all registrations.
+          Enter admin credentials to access Admin Received.
         </p>
 
-        <label style={S.label}>Username</label>
+        <label style={S.label}>
+          Username
+        </label>
 
         <input
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) =>
+            setUsername(e.target.value)
+          }
           placeholder="Admin username"
           style={{
             ...S.input,
@@ -2872,21 +3616,23 @@ function AdminLoginModal({ onClose, onSuccess }) {
           }}
         />
 
-        <label style={S.label}>Password</label>
+        <label style={S.label}>
+          Password
+        </label>
 
         <input
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(e.target.value)
+          }
           placeholder="Admin password"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               handleLogin();
             }
           }}
-          style={{
-            ...S.input,
-          }}
+          style={S.input}
         />
 
         {error && (
@@ -2934,7 +3680,7 @@ function AdminLoginModal({ onClose, onSuccess }) {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? "Checking..." : "Login & Clear"}
+            {loading ? "Checking..." : "Login"}
           </button>
         </div>
       </div>
@@ -3145,6 +3891,12 @@ export default function App() {
   const [cancelTarget, setCancelTarget] =
     useState(null);
 
+  const [adminEntries, setAdminEntries] =
+  useState([]);
+
+const [adminSummary, setAdminSummary] =
+  useState(null);
+
 
   useEffect(() => {
     loadEntries()
@@ -3256,12 +4008,138 @@ async function handleSubmit(entry) {
 }
 
 
-  function handleClear() {
+function handleClear() {
   if (!entries.length) {
     return;
   }
 
-  setShowAdminLogin(true);
+  openAdmin();
+}
+
+async function refreshAdmin() {
+  try {
+    const data = await loadAdminData();
+
+    setAdminEntries(
+      Array.isArray(data.entries)
+        ? data.entries
+        : []
+    );
+
+    setAdminSummary(
+      data.summary || null
+    );
+  } catch (error) {
+    alert(
+      error.message ||
+      "Unable to load admin data."
+    );
+
+    setScreen("dashboard");
+  }
+}
+
+
+function openAdmin() {
+  const token =
+    sessionStorage.getItem(
+      "svara_admin_token"
+    );
+
+  if (!token) {
+    setShowAdminLogin(true);
+    return;
+  }
+
+  setScreen("admin");
+  refreshAdmin();
+}
+
+
+function handleAdminLoginSuccess() {
+  setShowAdminLogin(false);
+  setScreen("admin");
+  refreshAdmin();
+}
+
+
+function logoutAdmin() {
+  sessionStorage.removeItem(
+    "svara_admin_token"
+  );
+
+  setAdminEntries([]);
+  setAdminSummary(null);
+  setScreen("dashboard");
+}
+
+
+async function handleStatusChange(
+  entry,
+  status
+) {
+  try {
+    const updatedEntry =
+      await updateEntryStatus(
+        entry.orderId,
+        status
+      );
+
+    setEntries((current) =>
+      current.map((item) =>
+        item.orderId ===
+        updatedEntry.orderId
+          ? updatedEntry
+          : item
+      )
+    );
+  } catch (error) {
+    alert(
+      error.message ||
+      "Unable to update status."
+    );
+  }
+}
+
+
+async function handleAdminClear() {
+  if (!adminEntries.length) {
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      "Are you sure you want to clear all registrations?"
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const token =
+      sessionStorage.getItem(
+        "svara_admin_token"
+      );
+
+    await clearEntries(token);
+
+    setEntries([]);
+    setAdminEntries([]);
+    setAdminSummary(null);
+
+    alert(
+      "All registrations have been cleared."
+    );
+
+    setScreen("dashboard");
+
+  } catch (error) {
+    alert(
+      error.message ||
+      "Unable to clear registrations."
+    );
+  }
 }
 
 async function handleCancel(entry, phone) {
@@ -3425,19 +4303,15 @@ alert(
   <>
     <style>{responsiveStyles}</style>
     {showAdminLogin && (
-      <AdminLoginModal
-        onClose={() =>
-          setShowAdminLogin(false)
-        }
-        onSuccess={() => {
-          setEntries([]);
-          setShowAdminLogin(false);
-          alert(
-            "All registrations have been cleared."
-          );
-        }}
-      />
-    )}
+  <AdminLoginModal
+    onClose={() =>
+      setShowAdminLogin(false)
+    }
+    onSuccess={
+      handleAdminLoginSuccess
+    }
+  />
+)}
 
     {cancelTarget && (
       <CancelTokenModal
@@ -3465,28 +4339,66 @@ alert(
 
 
       {screen === "dashboard" ? (
-       <Dashboard
-  entries={entries}
-  onSelect={(type) => {
-    setActiveType(type);
-    setScreen("form");
-  }}
-  onExport={downloadCentralExcel}
-  onClear={handleClear}
-  onCancel={(entry) =>
-    setCancelTarget(entry)
-  }
-/>
-      ) : (
-        <FormScreen
-          type={activeType}
-          entries={entries}
-          onSubmit={handleSubmit}
-          onBack={() =>
-            setScreen("dashboard")
-          }
-        />
-      )}
+  <Dashboard
+    entries={entries}
+
+    onSelect={(type) => {
+      setActiveType(type);
+      setScreen("form");
+    }}
+
+    onClear={handleClear}
+
+    onCancel={(entry) =>
+      setCancelTarget(entry)
+    }
+
+    onStatusChange={
+      handleStatusChange
+    }
+
+    onReprint={printLabels}
+
+    onAdmin={openAdmin}
+  />
+
+) : screen === "admin" ? (
+
+  <AdminReceived
+    adminEntries={adminEntries}
+    adminSummary={adminSummary}
+
+    onBack={() =>
+      setScreen("dashboard")
+    }
+
+    onRefresh={refreshAdmin}
+
+    onDownload={
+      downloadAdminExcel
+    }
+
+    onClear={
+      handleAdminClear
+    }
+
+    onLogout={
+      logoutAdmin
+    }
+  />
+
+) : (
+
+  <FormScreen
+    type={activeType}
+    entries={entries}
+    onSubmit={handleSubmit}
+    onBack={() =>
+      setScreen("dashboard")
+    }
+  />
+
+)}
 
     </>
   );

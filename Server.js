@@ -3,15 +3,12 @@ const cors = require("cors");
 const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Excel configuration
-// ─────────────────────────────────────────────────────────────────────────────
 
 const DATA_DIR =
   process.env.DATA_DIR || path.join(__dirname, "data");
@@ -24,6 +21,7 @@ const FILE_PATH = path.join(
   DATA_DIR,
   "registrations.xlsx"
 );
+
 const SHEET_NAME = "Registrations";
 
 const HEADERS = [
@@ -36,40 +34,159 @@ const HEADERS = [
   "Email",
   "Phone",
   "Payment",
+  "Amount",
   "Date",
   "Time",
   "Status",
   "Cancelled At",
+  "Admin Notes",
 ];
 
-// Available SVARA token types
 const ALLOWED_TOKEN_TYPES = [
   "Bullet",
   "Saree",
   "Silver",
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: Check whether Excel file is locked
-// ─────────────────────────────────────────────────────────────────────────────
+const ALLOWED_STATUSES = [
+  "Complete",
+  "Payment Not Received",
+  "Cancelled",
+];
+
+const MAX_QUANTITY = 9999;
+
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+function normalizeStatus(value) {
+  const status = String(value || "").trim();
+
+  if (status === "Cancelled") {
+    return "Cancelled";
+  }
+
+  if (status === "Payment Not Received") {
+    return "Payment Not Received";
+  }
+
+  // V2 / legacy "Active" records become Complete.
+  return "Complete";
+}
+
+
+/* =========================================================
+   NORMALIZE EXCEL ROW
+========================================================= */
+
+function normalizeRow(row = {}) {
+  return {
+    "Order ID":
+      row["Order ID"] ??
+      row["Order Id"] ??
+      row.OrderID ??
+      "",
+
+    "Token Type":
+      row["Token Type"] ??
+      row["Token type"] ??
+      "",
+
+    Quantity:
+      Number(row.Quantity ?? 0),
+
+    "Token Start":
+      row["Token Start"] ?? "",
+
+    "Token End":
+      row["Token End"] ?? "",
+
+    Name:
+      row.Name ?? "",
+
+    Email:
+      row.Email ?? "",
+
+    Phone:
+      row.Phone ?? "",
+
+    Payment:
+      row.Payment ??
+      row["Payment Mode"] ??
+      "",
+
+    Amount:
+      Number(row.Amount ?? 0) || 0,
+
+    Date:
+      row.Date ?? "",
+
+    Time:
+      row.Time ?? "",
+
+    Status:
+      normalizeStatus(row.Status),
+
+    "Cancelled At":
+      row["Cancelled At"] ?? "",
+
+    "Admin Notes":
+      row["Admin Notes"] ?? "",
+  };
+}
+
+
+/* =========================================================
+   CONVERT ROW → CLIENT ENTRY
+========================================================= */
+
+function toClientEntry(row) {
+  const r = normalizeRow(row);
+
+  return {
+    orderId: String(r["Order ID"] || ""),
+    tokenType: String(r["Token Type"] || ""),
+    quantity: Number(r.Quantity) || 0,
+    tokenStart: String(r["Token Start"] || ""),
+    tokenEnd: String(r["Token End"] || ""),
+    name: String(r.Name || ""),
+    email: String(r.Email || ""),
+    phone: String(r.Phone || ""),
+    payment: String(r.Payment || ""),
+    amount: Number(r.Amount) || 0,
+    date: String(r.Date || ""),
+    time: String(r.Time || ""),
+    status: normalizeStatus(r.Status),
+    cancelledAt: String(r["Cancelled At"] || ""),
+    adminNotes: String(r["Admin Notes"] || ""),
+  };
+}
+
+
+/* =========================================================
+   EXCEL LOCK CHECK
+========================================================= */
 
 function isLockedFileError(err) {
-  return (
+  return !!(
     err &&
     (
       err.code === "EBUSY" ||
       err.code === "EACCES" ||
       err.code === "EPERM" ||
       /being used by another process|locked|permission denied/i.test(
-        err.message
+        err.message || ""
       )
     )
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: Make sure Excel is writable
-// ─────────────────────────────────────────────────────────────────────────────
+
+/* =========================================================
+   EXCEL WRITE CHECK
+========================================================= */
 
 function assertExcelIsWritable() {
   if (!fs.existsSync(FILE_PATH)) {
@@ -96,135 +213,139 @@ function assertExcelIsWritable() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: Normalize Excel row
-// ─────────────────────────────────────────────────────────────────────────────
 
-function normalizeRow(row = {}) {
-  return {
-    "Order ID":
-      row["Order ID"] ??
-      row["Order Id"] ??
-      row["OrderID"] ??
-      "",
-
-    "Token Type":
-      row["Token Type"] ??
-      row["Token type"] ??
-      "",
-
-    Quantity:
-      Number(row["Quantity"] ?? 0),
-
-    "Token Start":
-      row["Token Start"] ??
-      "",
-
-    "Token End":
-      row["Token End"] ??
-      "",
-
-    Name:
-      row["Name"] ??
-      "",
-
-    Email:
-      row["Email"] ??
-      "",
-
-    Phone:
-      row["Phone"] ??
-      "",
-
-    Payment:
-      row["Payment"] ??
-      "",
-
-    Date:
-      row["Date"] ??
-      "",
-
-    Time:
-      row["Time"] ??
-      "",
-    Status:
-  row["Status"] ?? "Active",
-
-"Cancelled At":
-  row["Cancelled At"] ?? "",
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: Read Excel
-// ─────────────────────────────────────────────────────────────────────────────
+/* =========================================================
+   READ EXCEL
+========================================================= */
 
 function readExcel() {
   if (!fs.existsSync(FILE_PATH)) {
-    console.log("📋 No Excel file found, starting fresh.");
     return [];
   }
 
-  try {
-    const workbook = XLSX.readFile(FILE_PATH);
+  const workbook = XLSX.readFile(FILE_PATH);
 
-    const firstSheetName = workbook.SheetNames[0];
+  const sheet =
+    workbook.Sheets[SHEET_NAME] ||
+    workbook.Sheets[workbook.SheetNames[0]];
 
-    if (!firstSheetName) {
-      console.log("⚠️ No worksheet found.");
-      return [];
-    }
+  if (!sheet) {
+    return [];
+  }
 
-    console.log(`📖 Found sheet: "${firstSheetName}"`);
+  return XLSX.utils
+    .sheet_to_json(sheet, {
+      defval: "",
+    })
+    .map(normalizeRow);
+}
 
-    const worksheet = workbook.Sheets[firstSheetName];
 
-    if (!worksheet) {
-      console.log("⚠️ Worksheet is empty.");
-      return [];
-    }
+/* =========================================================
+   WRITE EXCEL
+========================================================= */
 
-    const rows = XLSX.utils
-      .sheet_to_json(worksheet, {
-        defval: "",
-      })
-      .map(normalizeRow);
+function writeExcel(rows) {
+  assertExcelIsWritable();
 
-    console.log(`📖 Read ${rows.length} existing orders.`);
+  const normalized =
+    rows.map(normalizeRow);
 
-    return rows;
-
-  } catch (err) {
-    console.error(
-      "❌ Error reading Excel:",
-      err.message
+  const worksheet =
+    XLSX.utils.json_to_sheet(
+      normalized,
+      {
+        header: HEADERS,
+      }
     );
+
+  worksheet["!cols"] = [
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 24 },
+    { wch: 24 },
+    { wch: 35 },
+  ];
+
+  const workbook =
+    XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    worksheet,
+    SHEET_NAME
+  );
+
+  const tempPath =
+    `${FILE_PATH}.tmp-${process.pid}-${Date.now()}`;
+
+  try {
+    XLSX.writeFile(
+      workbook,
+      tempPath
+    );
+
+    fs.renameSync(
+      tempPath,
+      FILE_PATH
+    );
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+    } catch (_) {}
+
+    if (isLockedFileError(err)) {
+      throw Object.assign(
+        new Error(
+          "Excel file is open. Please close it before continuing."
+        ),
+        {
+          statusCode: 409,
+          code: err.code || "LOCKED",
+        }
+      );
+    }
 
     throw err;
   }
 }
 
-function getTokenPrefix(tokenType) {
-  const prefixes = {
-    Bullet: "BUL",
-    Saree: "SAR",
-    Silver: "SLV",
-  };
 
-  return prefixes[tokenType];
+/* =========================================================
+   TOKEN HELPERS
+========================================================= */
+
+function getTokenPrefix(tokenType) {
+  if (tokenType === "Bullet") {
+    return "BUL";
+  }
+
+  if (tokenType === "Saree") {
+    return "SAR";
+  }
+
+  return "SLV";
 }
 
 
 function getSerialFromToken(token) {
-  if (!token) {
-    return 0;
-  }
-
   const match =
-    String(token).match(/(\d+)$/);
+    String(token || "").match(/(\d+)$/);
 
   return match
-    ? parseInt(match[1], 10)
+    ? Number(match[1])
     : 0;
 }
 
@@ -233,64 +354,95 @@ function makeTokenId(
   tokenType,
   serial
 ) {
-  const prefix =
-    getTokenPrefix(tokenType);
-
-  return `${prefix}${String(
-    serial
-  ).padStart(4, "0")}`;
+  return (
+    `${getTokenPrefix(tokenType)}${String(serial).padStart(4, "0")}`
+  );
 }
 
 
-function getNextTokenSerial(rows, tokenType, quantity) {
+/* =========================================================
+   TOKEN ALLOCATION
+
+   Cancelled tokens are NOT considered used.
+   Therefore they can be reused.
+========================================================= */
+
+function getNextTokenSerial(
+  rows,
+  tokenType,
+  quantity
+) {
   const used = new Set();
 
-  rows.forEach((row) => {
-    if (row["Token Type"] !== tokenType) {
-      return;
-    }
+  for (const raw of rows) {
+    const row =
+      normalizeRow(raw);
 
     if (
-      String(row.Status || "Active").toLowerCase() ===
-      "cancelled"
+      row["Token Type"] !== tokenType ||
+      row.Status === "Cancelled"
     ) {
-      return;
+      continue;
     }
 
-    const start = getSerialFromToken(
-      row["Token Start"]
-    );
+    const start =
+      getSerialFromToken(
+        row["Token Start"]
+      );
 
-    const end = getSerialFromToken(
-      row["Token End"]
-    );
+    const qty =
+      Number(row.Quantity) || 0;
 
-    if (!start || !end) {
-      return;
+    if (start > 0 && qty > 0) {
+      for (
+        let i = 0;
+        i < qty;
+        i++
+      ) {
+        used.add(start + i);
+      }
+    } else {
+      const end =
+        getSerialFromToken(
+          row["Token End"]
+        );
+
+      if (
+        start > 0 &&
+        end >= start
+      ) {
+        for (
+          let i = start;
+          i <= end;
+          i++
+        ) {
+          used.add(i);
+        }
+      }
     }
-
-    for (let i = start; i <= end; i++) {
-      used.add(i);
-    }
-  });
+  }
 
   let candidate = 1;
 
   while (true) {
-    let available = true;
+    let free = true;
 
     for (
-      let i = candidate;
-      i < candidate + quantity;
+      let i = 0;
+      i < quantity;
       i++
     ) {
-      if (used.has(i)) {
-        available = false;
+      if (
+        used.has(
+          candidate + i
+        )
+      ) {
+        free = false;
         break;
       }
     }
 
-    if (available) {
+    if (free) {
       return candidate;
     }
 
@@ -299,830 +451,1012 @@ function getNextTokenSerial(rows, tokenType, quantity) {
 }
 
 
+/* =========================================================
+   ORDER NUMBER
+========================================================= */
+
 function getNextOrderNumber(rows) {
-  let maxOrder = 0;
+  let max = 0;
 
-  rows.forEach((row) => {
-    const value = String(
-      row["Order ID"] || ""
-    );
-
+  for (const raw of rows) {
     const match =
-      value.match(/(\d+)$/);
+      String(
+        normalizeRow(raw)["Order ID"] || ""
+      ).match(/(\d+)$/);
 
     if (match) {
-      maxOrder = Math.max(
-        maxOrder,
-        parseInt(match[1], 10)
-      );
-    }
-  });
-
-  return maxOrder + 1;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: Write Excel
-// ─────────────────────────────────────────────────────────────────────────────
-
-function writeExcel(rows) {
-  try {
-    assertExcelIsWritable();
-
-    console.log(
-      `✏️ Writing ${rows.length} orders to Excel...`
-    );
-
-    const worksheet = XLSX.utils.json_to_sheet(
-      rows,
-      {
-        header: HEADERS,
-      }
-    );
-
-    // Excel column widths
-    worksheet["!cols"] = [
-      16, // Order ID
-      14, // Token Type
-      10, // Quantity
-      14, // Token Start
-      14, // Token End
-      22, // Name
-      28, // Email
-      16, // Phone
-      12, // Payment
-      12, // Date
-      12, // Time
-    ].map((width) => ({
-      wch: width,
-    }));
-
-    let workbook;
-
-    // If Excel already exists, preserve workbook
-    if (fs.existsSync(FILE_PATH)) {
-
-      workbook = XLSX.readFile(FILE_PATH);
-
-      const firstSheetName =
-        workbook.SheetNames[0];
-
-      if (firstSheetName) {
-
-        delete workbook.Sheets[firstSheetName];
-
-        workbook.SheetNames[0] =
-          SHEET_NAME;
-
-        workbook.Sheets[SHEET_NAME] =
-          worksheet;
-
-      } else {
-
-        XLSX.utils.book_append_sheet(
-          workbook,
-          worksheet,
-          SHEET_NAME
+      max =
+        Math.max(
+          max,
+          Number(match[1])
         );
-      }
-
-    } else {
-
-      workbook =
-        XLSX.utils.book_new();
-
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        SHEET_NAME
-      );
     }
-
-    XLSX.writeFile(
-      workbook,
-      FILE_PATH
-    );
-
-    console.log(
-      `✅ Excel updated successfully.`
-    );
-
-  } catch (err) {
-
-    if (isLockedFileError(err)) {
-
-      const message =
-        "Excel file is open. Please close it before continuing.";
-
-      console.error(
-        `❌ ${message}`
-      );
-
-      throw Object.assign(
-        new Error(message),
-        {
-          statusCode: 409,
-          code: err.code || "LOCKED",
-        }
-      );
-    }
-
-    console.error(
-      "❌ Error writing Excel:",
-      err.message
-    );
-
-    throw err;
   }
+
+  return max + 1;
 }
 
-function getTokenPrefix(tokenType) {
-  const prefixes = {
-    Bullet: "BUL",
-    Saree: "SAR",
-    Silver: "SLV",
-  };
 
-  return prefixes[tokenType];
+/* =========================================================
+   EXCEL ALLOCATION LOCK
+
+   Prevents two users from receiving
+   the same token/order.
+========================================================= */
+
+let excelAllocationQueue =
+  Promise.resolve();
+
+function withExcelAllocationLock(
+  work
+) {
+  const run =
+    excelAllocationQueue.then(
+      work,
+      work
+    );
+
+  excelAllocationQueue =
+    run.catch(() => {});
+
+  return run;
 }
 
-function getSerialFromToken(token) {
-  if (!token) return 0;
 
-  const match = String(token).match(/(\d+)$/);
+/* =========================================================
+   ADMIN AUTHENTICATION
+========================================================= */
 
-  return match ? parseInt(match[1], 10) : 0;
+const ADMIN_TOKEN_TTL_MS =
+  8 * 60 * 60 * 1000;
+
+const ADMIN_TOKEN_SECRET =
+  process.env.ADMIN_TOKEN_SECRET ||
+  crypto
+    .createHash("sha256")
+    .update(
+      `${process.env.ADMIN_USERNAME || ""}:${process.env.ADMIN_PASSWORD || ""}:SVARA-V3`
+    )
+    .digest("hex");
+
+
+function base64url(value) {
+  return Buffer
+    .from(value)
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 }
 
-function makeTokenId(tokenType, serial) {
-  const prefix = getTokenPrefix(tokenType);
 
-  return `${prefix}${String(serial).padStart(4, "0")}`;
+function signAdminPayload(
+  payload
+) {
+  const encoded =
+    base64url(
+      JSON.stringify(payload)
+    );
+
+  const signature =
+    crypto
+      .createHmac(
+        "sha256",
+        ADMIN_TOKEN_SECRET
+      )
+      .update(encoded)
+      .digest("base64url");
+
+  return `${encoded}.${signature}`;
 }
 
-// function getNextTokenSerial(rows, tokenType) {
-//   let maxSerial = 0;
 
-//   rows.forEach((row) => {
-//     if (row["Token Type"] !== tokenType) return;
-
-//     const startSerial = getSerialFromToken(row["Token Start"]);
-//     const endSerial = getSerialFromToken(row["Token End"]);
-
-//     maxSerial = Math.max(
-//       maxSerial,
-//       startSerial,
-//       endSerial
-//     );
-//   });
-
-//   return maxSerial + 1;
-// }
-
-function getNextOrderNumber(rows) {
-  let maxOrder = 0;
-
-  rows.forEach((row) => {
-    const value = String(row["Order ID"] || "");
-
-    const match = value.match(/(\d+)$/);
-
-    if (match) {
-      maxOrder = Math.max(
-        maxOrder,
-        parseInt(match[1], 10)
-      );
-    }
+function createAdminToken(
+  username
+) {
+  return signAdminPayload({
+    sub: username,
+    exp:
+      Date.now() +
+      ADMIN_TOKEN_TTL_MS,
   });
-
-  return maxOrder + 1;
 }
 
-/*
- * Ensures token/order allocation is processed
- * one request at a time within this Node server.
- */
-let excelAllocationQueue = Promise.resolve();
 
-function withExcelAllocationLock(work) {
-  const result = excelAllocationQueue.then(
-    work,
-    work
-  );
-
-  excelAllocationQueue = result.catch(() => {});
-
-  return result;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /entries
-// ─────────────────────────────────────────────────────────────────────────────
-
-app.get("/entries", (req, res) => {
-
+function verifyAdminToken(
+  token
+) {
   try {
+    const [
+      encoded,
+      signature,
+    ] =
+      String(token || "")
+        .split(".");
 
-    const rows = readExcel();
+    if (
+      !encoded ||
+      !signature
+    ) {
+      return false;
+    }
 
-    const entries = rows.map((row) => ({
+    const expected =
+      crypto
+        .createHmac(
+          "sha256",
+          ADMIN_TOKEN_SECRET
+        )
+        .update(encoded)
+        .digest("base64url");
 
-      orderId:
-        row["Order ID"] || "",
+    const a =
+      Buffer.from(signature);
 
-      tokenType:
-        row["Token Type"] || "",
+    const b =
+      Buffer.from(expected);
 
-      quantity:
-        Number(row["Quantity"]) || 0,
+    if (
+      a.length !== b.length ||
+      !crypto.timingSafeEqual(
+        a,
+        b
+      )
+    ) {
+      return false;
+    }
 
-      tokenStart:
-        row["Token Start"] || "",
+    const payload =
+      JSON.parse(
+        Buffer
+          .from(
+            encoded,
+            "base64url"
+          )
+          .toString("utf8")
+      );
 
-      tokenEnd:
-        row["Token End"] || "",
+    return (
+      payload.sub ===
+        process.env.ADMIN_USERNAME &&
+      Number(payload.exp) >
+        Date.now()
+    );
+  } catch (_) {
+    return false;
+  }
+}
 
-      name:
-        row["Name"] || "",
 
-      email:
-        row["Email"] || "",
-
-      phone:
-        row["Phone"] || "",
-
-      payment:
-        row["Payment"] || "",
-
-      date:
-        row["Date"] || "",
-
-      time:
-        row["Time"] || "",
-      status:
-  row.Status || "Active",
-
-cancelledAt:
-  row["Cancelled At"] || "",
-    }));
-
-    res.json(entries);
-
-  } catch (err) {
-
-    console.error(
-      "❌ GET /entries error:",
-      err.message
+function requireAdmin(
+  req,
+  res,
+  next
+) {
+  const header =
+    String(
+      req.headers.authorization ||
+        ""
     );
 
-    res.status(500).json({
-      error:
-        "Failed to read token entries.",
-    });
-  }
-});
+  const token =
+    header.startsWith(
+      "Bearer "
+    )
+      ? header.slice(7)
+      : "";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /download-excel
-// ─────────────────────────────────────────────────────────────────────────────
+  if (
+    !verifyAdminToken(token)
+  ) {
+    return res
+      .status(401)
+      .json({
+        error:
+          "Admin authentication required.",
+      });
+  }
+
+  next();
+}
+
+
+/* =========================================================
+   GET PUBLIC ENTRIES
+========================================================= */
 
 app.get(
-  "/download-excel",
+  "/entries",
   (req, res) => {
-
     try {
-
-      if (!fs.existsSync(FILE_PATH)) {
-
-        return res.status(404).json({
-          error:
-            "No Excel file has been created yet.",
-        });
-      }
-
-      res.download(
-        FILE_PATH,
-        "svara-token-registrations.xlsx"
+      res.json(
+        readExcel()
+          .map(toClientEntry)
       );
-
     } catch (err) {
-
       console.error(
-        "❌ Download error:",
+        "GET /entries error:",
         err.message
       );
 
-      res.status(500).json({
-        error:
-          "Failed to download Excel file.",
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Failed to read token entries.",
+        });
     }
   }
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /entries
-// ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /entries
-// CENTRALIZED TOKEN ALLOCATION
-// ─────────────────────────────────────────────────────────────────────────────
+/* =========================================================
+   CREATE ORDER
+========================================================= */
 
-app.post("/entries", async (req, res) => {
-  try {
-    console.log(
-      "📥 Received token order:",
-      req.body
-    );
+app.post(
+  "/entries",
+  async (req, res) => {
+    try {
+      const entry =
+        req.body || {};
 
-    const entry = req.body || {};
+      if (
+        !ALLOWED_TOKEN_TYPES.includes(
+          entry.tokenType
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Invalid token type. Allowed values are Bullet, Saree and Silver.",
+          });
+      }
 
+      const quantity =
+        Number(entry.quantity);
 
-    // ─────────────────────────────────────
-    // Validate token type
-    // ─────────────────────────────────────
+      if (
+        !Number.isInteger(
+          quantity
+        ) ||
+        quantity < 1 ||
+        quantity > MAX_QUANTITY
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              `Quantity must be a whole number between 1 and ${MAX_QUANTITY}.`,
+          });
+      }
 
-    if (!entry.tokenType) {
-      return res.status(400).json({
-        error:
-          "Token type is required.",
+      if (
+        !String(
+          entry.name || ""
+        ).trim()
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Customer name is required.",
+          });
+      }
+
+      if (
+        !String(
+          entry.phone || ""
+        ).trim()
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Customer phone number is required.",
+          });
+      }
+
+      const amount =
+        Number(entry.amount);
+
+      if (
+        !Number.isFinite(
+          amount
+        ) ||
+        amount < 0
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Amount must be a valid number greater than or equal to 0.",
+          });
+      }
+
+      const newRow =
+        await withExcelAllocationLock(
+          () => {
+            const rows =
+              readExcel();
+
+            const nextOrder =
+              getNextOrderNumber(
+                rows
+              );
+
+            const orderId =
+              `ORD${String(nextOrder).padStart(4, "0")}`;
+
+            const nextSerial =
+              getNextTokenSerial(
+                rows,
+                entry.tokenType,
+                quantity
+              );
+
+            const now =
+              new Date();
+
+            const row = {
+              "Order ID":
+                orderId,
+
+              "Token Type":
+                entry.tokenType,
+
+              Quantity:
+                quantity,
+
+              "Token Start":
+                makeTokenId(
+                  entry.tokenType,
+                  nextSerial
+                ),
+
+              "Token End":
+                makeTokenId(
+                  entry.tokenType,
+                  nextSerial +
+                    quantity -
+                    1
+                ),
+
+              Name:
+                String(
+                  entry.name
+                ).trim(),
+
+              Email:
+                String(
+                  entry.email || ""
+                ).trim(),
+
+              Phone:
+                String(
+                  entry.phone
+                ).trim(),
+
+              Payment:
+                String(
+                  entry.payment || ""
+                ),
+
+              Amount:
+                amount,
+
+              Date:
+                now.toLocaleDateString(
+                  "en-IN"
+                ),
+
+              Time:
+                now.toLocaleTimeString(
+                  "en-IN",
+                  {
+                    hour:
+                      "2-digit",
+                    minute:
+                      "2-digit",
+                  }
+                ),
+
+              Status:
+                "Complete",
+
+              "Cancelled At":
+                "",
+
+              "Admin Notes":
+                "",
+            };
+
+            rows.push(row);
+
+            writeExcel(rows);
+
+            return row;
+          }
+        );
+
+      res.json({
+        success: true,
+        entry:
+          toClientEntry(
+            newRow
+          ),
       });
-    }
-
-
-    if (
-      !ALLOWED_TOKEN_TYPES.includes(
-        entry.tokenType
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Invalid token type. Allowed values are Bullet, Saree and Silver.",
-      });
-    }
-
-
-    // ─────────────────────────────────────
-    // Validate quantity
-    // ─────────────────────────────────────
-
-    const quantity =
-      Number(entry.quantity);
-    const MAX_QUANTITY = 9999;
-
-    if (
-  !Number.isInteger(quantity) ||
-  quantity < 1 ||
-  quantity > MAX_QUANTITY
-) {
-  return res.status(400).json({
-    error: `Quantity must be a whole number between 1 and ${MAX_QUANTITY}.`,
-  });
-}
-
-
-    // ─────────────────────────────────────
-    // Validate customer details
-    // ─────────────────────────────────────
-
-    if (
-      !entry.name ||
-      !String(entry.name).trim()
-    ) {
-      return res.status(400).json({
-        error:
-          "Customer name is required.",
-      });
-    }
-
-
-    if (
-      !entry.phone ||
-      !String(entry.phone).trim()
-    ) {
-      return res.status(400).json({
-        error:
-          "Customer phone number is required.",
-      });
-    }
-
-
-    // ─────────────────────────────────────
-    // CENTRAL ALLOCATION
-    // ─────────────────────────────────────
-
-    const newRow =
-      await withExcelAllocationLock(
-        () => {
-
-          /*
-           * IMPORTANT:
-           * Read Excel INSIDE the lock.
-           *
-           * This means the second request
-           * sees the Excel update made by
-           * the first request.
-           */
-          const rows =
-            readExcel();
-
-
-          // ───────────────────────────────
-          // Generate Order ID
-          // ───────────────────────────────
-
-          const nextOrder =
-            getNextOrderNumber(rows);
-
-          const orderId =
-            `ORD${String(
-              nextOrder
-            ).padStart(4, "0")}`;
-
-
-          // ───────────────────────────────
-          // Generate Token Range
-          // ───────────────────────────────
-
-          const nextSerial =
-            getNextTokenSerial(
-              rows,
-              entry.tokenType,
-              quantity
-            );
-
-
-          const tokenStart =
-            makeTokenId(
-              entry.tokenType,
-              nextSerial
-            );
-
-
-          const tokenEnd =
-            makeTokenId(
-              entry.tokenType,
-              nextSerial +
-                quantity -
-                1
-            );
-
-
-          // ───────────────────────────────
-          // Server Date / Time
-          // ───────────────────────────────
-
-          const now =
-            new Date();
-
-
-          const date =
-            now.toLocaleDateString(
-              "en-IN"
-            );
-
-
-          const time =
-            now.toLocaleTimeString(
-              "en-IN",
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-              }
-            );
-
-
-          // ───────────────────────────────
-          // Create Excel Row
-          // ───────────────────────────────
-
-          const row = {
-
-            "Order ID":
-              orderId,
-
-            "Token Type":
-              entry.tokenType,
-
-            "Quantity":
-              quantity,
-
-            "Token Start":
-              tokenStart,
-
-            "Token End":
-              tokenEnd,
-
-            Name:
-              String(
-                entry.name
-              ).trim(),
-
-            Email:
-              String(
-                entry.email || ""
-              ).trim(),
-
-            Phone:
-              String(
-                entry.phone
-              ).trim(),
-
-            Payment:
-              entry.payment || "",
-
-            Date:
-              date,
-
-            Time:
-              time,
-            Status: "Active",
-            "Cancelled At": "",
-          };
-
-
-          console.log(
-            "📝 Centrally allocated token order:",
-            row
-          );
-
-
-          // ───────────────────────────────
-          // Save to central Excel
-          // ───────────────────────────────
-
-          rows.push(row);
-
-          writeExcel(rows);
-
-
-          /*
-           * Return the row that was actually
-           * allocated by the server.
-           */
-          return row;
-        }
+    } catch (err) {
+      console.error(
+        "POST /entries error:",
+        err.message
       );
 
-
-    // ─────────────────────────────────────
-    // Return authoritative server result
-    // ─────────────────────────────────────
-
-    res.json({
-
-      success: true,
-
-      entry: {
-
-        orderId:
-          newRow["Order ID"],
-
-        tokenType:
-          newRow["Token Type"],
-
-        quantity:
-          newRow["Quantity"],
-
-        tokenStart:
-          newRow["Token Start"],
-
-        tokenEnd:
-          newRow["Token End"],
-
-        name:
-          newRow.Name,
-
-        email:
-          newRow.Email,
-
-        phone:
-          newRow.Phone,
-
-        payment:
-          newRow.Payment,
-
-        date:
-          newRow.Date,
-
-        time:
-          newRow.Time,
-      },
-
-    });
-
-  } catch (err) {
-
-    console.error(
-      "❌ POST /entries error:",
-      err.message
-    );
-
-
-    const status =
-      err.statusCode || 500;
-
-
-    res.status(status).json({
-
-      error:
-        err.message ||
-        "Failed to save token order.",
-
-    });
-
+      res
+        .status(
+          err.statusCode ||
+            500
+        )
+        .json({
+          error:
+            err.message ||
+            "Failed to save token order.",
+        });
+    }
   }
-});
+);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /entries
-// ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Health check
-// ─────────────────────────────────────────────────────────────────────────────
+/* =========================================================
+   UPDATE STATUS
 
-app.get("/test", (req, res) => {
+   Complete ↔ Payment Not Received
 
-  res.json({
-    success: true,
-    message:
-      "SVARA Token System backend is running.",
-    availableTokens:
-      ALLOWED_TOKEN_TYPES,
-    excelFile:
-      FILE_PATH,
-  });
+   Cancelled cannot be changed.
+========================================================= */
 
-});
+app.post(
+  "/entries/:orderId/status",
+  async (req, res) => {
+    try {
+      const orderId =
+        String(
+          req.params.orderId ||
+            ""
+        );
+
+      const requested =
+        String(
+          req.body?.status ||
+            ""
+        ).trim();
+
+      if (
+        ![
+          "Complete",
+          "Payment Not Received",
+        ].includes(requested)
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Status must be Complete or Payment Not Received.",
+          });
+      }
+
+      const updated =
+        await withExcelAllocationLock(
+          () => {
+            const rows =
+              readExcel();
+
+            const index =
+              rows.findIndex(
+                (r) =>
+                  String(
+                    r["Order ID"]
+                  ) === orderId
+              );
+
+            if (index < 0) {
+              throw Object.assign(
+                new Error(
+                  "Registration not found."
+                ),
+                {
+                  statusCode: 404,
+                }
+              );
+            }
+
+            const row =
+              normalizeRow(
+                rows[index]
+              );
+
+            if (
+              row.Status ===
+              "Cancelled"
+            ) {
+              throw Object.assign(
+                new Error(
+                  "Cancelled registrations cannot be changed."
+                ),
+                {
+                  statusCode: 400,
+                }
+              );
+            }
+
+            row.Status =
+              requested;
+
+            rows[index] =
+              row;
+
+            writeExcel(
+              rows
+            );
+
+            return row;
+          }
+        );
+
+      res.json({
+        success: true,
+        entry:
+          toClientEntry(
+            updated
+          ),
+      });
+    } catch (err) {
+      res
+        .status(
+          err.statusCode ||
+            500
+        )
+        .json({
+          error:
+            err.message ||
+            "Failed to update status.",
+        });
+    }
+  }
+);
+
+
+/* =========================================================
+   CANCEL ORDER
+
+   Cancelled is permanent.
+========================================================= */
 
 app.post(
   "/entries/:orderId/cancel",
   async (req, res) => {
     try {
-      const orderId = req.params.orderId;
-      const phone = String(
-        req.body?.phone || ""
-      ).trim();
+      const orderId =
+        String(
+          req.params.orderId ||
+            ""
+        );
+
+      const phone =
+        String(
+          req.body?.phone ||
+            ""
+        ).trim();
 
       if (!phone) {
-        return res.status(400).json({
-          error: "Phone number is required.",
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Phone number is required.",
+          });
       }
 
-      const updatedEntry =
-        await withExcelAllocationLock(() => {
-          const rows = readExcel();
+      const updated =
+        await withExcelAllocationLock(
+          () => {
+            const rows =
+              readExcel();
 
-          const index = rows.findIndex(
-            (row) =>
-              String(row["Order ID"]) ===
-              String(orderId)
-          );
+            const index =
+              rows.findIndex(
+                (r) =>
+                  String(
+                    r["Order ID"]
+                  ) === orderId
+              );
 
-          if (index === -1) {
-            const error = new Error(
-              "Registration not found."
+            if (index < 0) {
+              throw Object.assign(
+                new Error(
+                  "Registration not found."
+                ),
+                {
+                  statusCode: 404,
+                }
+              );
+            }
+
+            const row =
+              normalizeRow(
+                rows[index]
+              );
+
+            if (
+              row.Status ===
+              "Cancelled"
+            ) {
+              throw Object.assign(
+                new Error(
+                  "This registration is already cancelled."
+                ),
+                {
+                  statusCode: 400,
+                }
+              );
+            }
+
+            if (
+              String(
+                row.Phone
+              ).trim() !== phone
+            ) {
+              throw Object.assign(
+                new Error(
+                  "Phone number does not match this registration."
+                ),
+                {
+                  statusCode: 401,
+                }
+              );
+            }
+
+            row.Status =
+              "Cancelled";
+
+            row["Cancelled At"] =
+              new Date().toLocaleString(
+                "en-IN"
+              );
+
+            rows[index] =
+              row;
+
+            writeExcel(
+              rows
             );
 
-            error.statusCode = 404;
-            throw error;
+            return row;
           }
-
-          const row = rows[index];
-
-          if (
-            String(row.Status || "Active")
-              .toLowerCase() === "cancelled"
-          ) {
-            const error = new Error(
-              "This registration is already cancelled."
-            );
-
-            error.statusCode = 400;
-            throw error;
-          }
-
-          if (
-            String(row.Phone || "").trim() !== phone
-          ) {
-            const error = new Error(
-              "Phone number does not match this registration."
-            );
-
-            error.statusCode = 401;
-            throw error;
-          }
-
-          row.Status = "Cancelled";
-
-          row["Cancelled At"] =
-            new Date().toLocaleString("en-IN");
-
-          rows[index] = row;
-
-          writeExcel(rows);
-
-          return row;
-        });
+        );
 
       res.json({
         success: true,
-        entry: {
-          orderId:
-            updatedEntry["Order ID"],
-          tokenType:
-            updatedEntry["Token Type"],
-          quantity:
-            updatedEntry.Quantity,
-          tokenStart:
-            updatedEntry["Token Start"],
-          tokenEnd:
-            updatedEntry["Token End"],
-          name:
-            updatedEntry.Name,
-          email:
-            updatedEntry.Email,
-          phone:
-            updatedEntry.Phone,
-          payment:
-            updatedEntry.Payment,
-          date:
-            updatedEntry.Date,
-          time:
-            updatedEntry.Time,
-          status:
-            "Cancelled",
-          cancelledAt:
-            updatedEntry["Cancelled At"],
-        },
+        entry:
+          toClientEntry(
+            updated
+          ),
       });
     } catch (err) {
-      console.error(
-        "❌ Cancel token error:",
-        err.message
-      );
-
-      res.status(
-        err.statusCode || 500
-      ).json({
-        error:
-          err.message ||
-          "Failed to cancel token.",
-      });
+      res
+        .status(
+          err.statusCode ||
+            500
+        )
+        .json({
+          error:
+            err.message ||
+            "Failed to cancel token.",
+        });
     }
   }
 );
 
+
+/* =========================================================
+   ADMIN LOGIN
+========================================================= */
+
 app.post(
-  "/admin/clear",
-  async (req, res) => {
-    try {
-      const username = String(
-        req.body?.username || ""
+  "/admin/login",
+  (req, res) => {
+    const username =
+      String(
+        req.body?.username ||
+          ""
       ).trim();
 
-      const password = String(
-        req.body?.password || ""
+    const password =
+      String(
+        req.body?.password ||
+          ""
       );
 
-      const expectedUsername =
-        process.env.ADMIN_USERNAME;
+    const expectedUsername =
+      process.env.ADMIN_USERNAME;
 
-      const expectedPassword =
-        process.env.ADMIN_PASSWORD;
+    const expectedPassword =
+      process.env.ADMIN_PASSWORD;
 
-      if (
-        !expectedUsername ||
-        !expectedPassword
-      ) {
-        return res.status(500).json({
+    if (
+      !expectedUsername ||
+      !expectedPassword
+    ) {
+      return res
+        .status(500)
+        .json({
           error:
             "Admin credentials are not configured on the server.",
         });
-      }
+    }
 
-      if (
-        username !== expectedUsername ||
-        password !== expectedPassword
-      ) {
-        return res.status(401).json({
+    if (
+      username !==
+        expectedUsername ||
+      password !==
+        expectedPassword
+    ) {
+      return res
+        .status(401)
+        .json({
           error:
             "Invalid admin credentials.",
         });
-      }
+    }
 
-      await withExcelAllocationLock(() => {
-        assertExcelIsWritable();
+    res.json({
+      success: true,
+      token:
+        createAdminToken(
+          username
+        ),
+      expiresIn:
+        ADMIN_TOKEN_TTL_MS,
+    });
+  }
+);
 
-        const emptyWorkbookRows = [];
 
-        writeExcel(
-          emptyWorkbookRows
+/* =========================================================
+   ADMIN RECEIVED DASHBOARD
+========================================================= */
+
+app.get(
+  "/admin/received",
+  requireAdmin,
+  (req, res) => {
+    try {
+      const entries =
+        readExcel()
+          .map(
+            toClientEntry
+          );
+
+      const summary =
+        entries.reduce(
+          (acc, e) => {
+            const qty =
+              Number(
+                e.quantity
+              ) || 0;
+
+            acc.totalOrders += 1;
+
+            acc.totalTokens +=
+              qty;
+
+            if (
+              e.status ===
+              "Complete"
+            ) {
+              acc.completedOrders +=
+                1;
+
+              acc.completedTokens +=
+                qty;
+
+              acc.totalAmountReceived +=
+                Number(
+                  e.amount
+                ) || 0;
+            } else if (
+              e.status ===
+              "Payment Not Received"
+            ) {
+              acc.paymentNotReceivedOrders +=
+                1;
+
+              acc.paymentNotReceivedTokens +=
+                qty;
+            } else if (
+              e.status ===
+              "Cancelled"
+            ) {
+              acc.cancelledOrders +=
+                1;
+
+              acc.cancelledTokens +=
+                qty;
+            }
+
+            return acc;
+          },
+          {
+            totalOrders: 0,
+            totalTokens: 0,
+
+            completedOrders: 0,
+            completedTokens: 0,
+
+            paymentNotReceivedOrders: 0,
+            paymentNotReceivedTokens: 0,
+
+            cancelledOrders: 0,
+            cancelledTokens: 0,
+
+            totalAmountReceived: 0,
+          }
         );
+
+      res.json({
+        summary,
+        entries,
       });
+    } catch (err) {
+      res
+        .status(500)
+        .json({
+          error:
+            "Failed to load admin data.",
+        });
+    }
+  }
+);
+
+
+/* =========================================================
+   ADMIN NOTES
+========================================================= */
+
+app.post(
+  "/admin/notes/:orderId",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const orderId =
+        String(
+          req.params.orderId ||
+            ""
+        );
+
+      const notes =
+        String(
+          req.body?.notes ||
+            ""
+        ).trim();
+
+      const updated =
+        await withExcelAllocationLock(
+          () => {
+            const rows =
+              readExcel();
+
+            const index =
+              rows.findIndex(
+                (r) =>
+                  String(
+                    r["Order ID"]
+                  ) === orderId
+              );
+
+            if (index < 0) {
+              throw Object.assign(
+                new Error(
+                  "Registration not found."
+                ),
+                {
+                  statusCode: 404,
+                }
+              );
+            }
+
+            const row =
+              normalizeRow(
+                rows[index]
+              );
+
+            row["Admin Notes"] =
+              notes;
+
+            rows[index] =
+              row;
+
+            writeExcel(
+              rows
+            );
+
+            return row;
+          }
+        );
+
+      res.json({
+        success: true,
+        entry:
+          toClientEntry(
+            updated
+          ),
+      });
+    } catch (err) {
+      res
+        .status(
+          err.statusCode ||
+            500
+        )
+        .json({
+          error:
+            err.message ||
+            "Failed to save admin notes.",
+        });
+    }
+  }
+);
+
+
+/* =========================================================
+   ADMIN-ONLY EXCEL DOWNLOAD
+========================================================= */
+
+app.get(
+  "/admin/download-excel",
+  requireAdmin,
+  (req, res) => {
+    if (
+      !fs.existsSync(
+        FILE_PATH
+      )
+    ) {
+      return res
+        .status(404)
+        .json({
+          error:
+            "No Excel file has been created yet.",
+        });
+    }
+
+    res.download(
+      FILE_PATH,
+      "svara-token-registrations.xlsx",
+      (err) => {
+        if (err) {
+          console.error(
+            "Admin download error:",
+            err.message
+          );
+        }
+      }
+    );
+  }
+);
+
+
+/* =========================================================
+   ADMIN-ONLY CLEAR
+========================================================= */
+
+app.post(
+  "/admin/clear",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      await withExcelAllocationLock(
+        () => writeExcel([])
+      );
 
       res.json({
         success: true,
@@ -1130,35 +1464,69 @@ app.post(
           "All registrations have been cleared.",
       });
     } catch (err) {
-      console.error(
-        "❌ Admin clear error:",
-        err.message
-      );
-
-      res.status(
-        err.statusCode || 500
-      ).json({
-        error:
-          err.message ||
-          "Failed to clear registrations.",
-      });
+      res
+        .status(
+          err.statusCode ||
+            500
+        )
+        .json({
+          error:
+            err.message ||
+            "Failed to clear registrations.",
+        });
     }
   }
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Start server
-// ─────────────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 4000;
+/* =========================================================
+   TEST
+========================================================= */
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("==============================================");
-  console.log("✅ SVARA Token Server is running");
-  console.log(`🌐 Server running on port ${PORT}`);
-  console.log(`📂 Excel file: ${FILE_PATH}`);
-  console.log(
-    `🎟️ Available tokens: ${ALLOWED_TOKEN_TYPES.join(", ")}`
-  );
-  console.log("==============================================");
-});
+app.get(
+  "/test",
+  (req, res) =>
+    res.json({
+      ok: true,
+      message:
+        "SVARA server is running.",
+    })
+);
+
+
+/* =========================================================
+   START SERVER
+========================================================= */
+
+const PORT =
+  process.env.PORT || 4000;
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      "=============================================="
+    );
+
+    console.log(
+      "SVARA V3 Token Server is running"
+    );
+
+    console.log(
+      `Port: ${PORT}`
+    );
+
+    console.log(
+      `Excel file: ${FILE_PATH}`
+    );
+
+    console.log(
+      `Tokens: ${ALLOWED_TOKEN_TYPES.join(", ")}`
+    );
+
+    console.log(
+      "=============================================="
+    );
+  }
+);
