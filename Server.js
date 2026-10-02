@@ -1616,6 +1616,8 @@ app.post(
 
   "/entries/:orderId/status",
 
+  requireAdmin,
+
   async (req, res) => {
 
     try {

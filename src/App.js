@@ -314,37 +314,16 @@ async function updateEntryStatus(
   orderId,
   status
 ) {
-  const res = await fetch(
-    `${API}/entries/${encodeURIComponent(
-      orderId
-    )}/status`,
+  const result = await adminFetch(
+    `/entries/${encodeURIComponent(orderId)}/status`,
     {
       method: "POST",
-
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-
-      body: JSON.stringify({
-        status,
-      }),
+      body: JSON.stringify({ status }),
     }
   );
 
-  const payload =
-    await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(
-      payload.error ||
-        "Unable to update status."
-    );
-  }
-
-  return payload.entry;
+  return result.entry || result;
 }
-
 
 async function loadAdminData() {
   return adminFetch(
