@@ -19,6 +19,7 @@ const TOKEN_TYPES = {
     icon: "🏍️",
     accent: "#7c3aed",
     light: "#f5f3ff",
+    price: 301,
   },
 
   Saree: {
@@ -27,6 +28,7 @@ const TOKEN_TYPES = {
     icon: "🥻",
     accent: "#db2777",
     light: "#fdf2f8",
+    price: 101,
   },
 
   Silver: {
@@ -35,6 +37,7 @@ const TOKEN_TYPES = {
     icon: "🥈",
     accent: "#475569",
     light: "#f8fafc",
+    price: 201,
   },
 };
 
@@ -2021,11 +2024,11 @@ function handlePayment(mode) {
                   TOTAL AMOUNT
                 </span>
                 <strong style={{ fontSize: 22, color: config.accent }}>
-                  ₹{(config.price * safeQuantity).toFixed(2)}
+                  ₹{((Number(config.price) || 0) * safeQuantity).toFixed(2)}
                 </strong>
               </div>
               <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>
-                ₹{config.price} × {safeQuantity} token{safeQuantity > 1 ? "s" : ""}
+                ₹{Number(config.price) || 0} × {safeQuantity} token{safeQuantity > 1 ? "s" : ""}
               </div>
             </div>
 
