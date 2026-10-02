@@ -186,53 +186,6 @@ async function saveAdminEntry(entry) {
   return result.entry || result;
 }
 
-async function getWhatsAppStatus(orderId) {
-  const res = await fetch(
-    `${API}/whatsapp/status/${encodeURIComponent(orderId)}`
-  );
-
-  const payload = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(
-      payload.error || "Unable to check WhatsApp status."
-    );
-  }
-
-  return payload;
-}
-
-async function waitForWhatsAppDelivery(orderId, timeoutMs = 30000) {
-  const started = Date.now();
-
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const status = await getWhatsAppStatus(orderId);
-
-      if (
-        status.status === "Delivered" ||
-        status.status === "Read"
-      ) {
-        return true;
-      }
-
-      if (
-        status.status === "Failed" ||
-        status.status === "No Phone" ||
-        status.status === "Not Configured"
-      ) {
-        return false;
-      }
-    } catch (error) {
-      console.error("WhatsApp status check failed:", error);
-      return false;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-
-  return false;
-}
 
 /* =========================================================
    TOKEN HELPERS
@@ -642,17 +595,7 @@ function printLabels(entry) {
   const date = escapeHtml(entry.date);
   const time = escapeHtml(entry.time);
 
-  /*
-   * WhatsApp-delivered orders need ONE label per token.
-   * Orders without a phone number or without confirmed delivery
-   * need TWO labels per token.
-   */
-  const copiesPerToken =
-    entry.whatsappDelivered === true ||
-    entry.whatsappStatus === "Delivered" ||
-    entry.whatsappStatus === "Read"
-      ? 1
-      : 2;
+  const copiesPerToken = 2;
 
   const labels = tokenIds
     .map((tokenId) =>
@@ -1480,12 +1423,6 @@ function SuccessModal({
             <strong>₹{Number(entry.amount || 0).toFixed(2)}</strong>
           </div>
 
-          <div style={successRow}>
-            <span>WhatsApp</span>
-            <strong>
-              {entry.whatsappStatus || (entry.phone ? "Pending" : "No Phone")}
-            </strong>
-          </div>
 
           <div style={successRow}>
             <span>Date</span>
@@ -4109,36 +4046,13 @@ async function handleSubmit(entry) {
 
     const savedEntry = await saveEntry(entry);
 
-    let finalEntry = {
-      ...savedEntry,
-      whatsappDelivered:
-        savedEntry.whatsappStatus === "Delivered" ||
-        savedEntry.whatsappStatus === "Read",
-    };
-
-    if (
-      savedEntry.phone &&
-      savedEntry.whatsappStatus === "Pending"
-    ) {
-      const delivered =
-        await waitForWhatsAppDelivery(
-          savedEntry.orderId,
-          30000
-        );
-
-      finalEntry = {
-        ...finalEntry,
-        whatsappDelivered: delivered,
-      };
-    }
-
     setEntries((current) => [
       ...current,
-      finalEntry,
+      savedEntry,
     ]);
 
     setScreen("dashboard");
-    setSuccessEntry(finalEntry);
+    setSuccessEntry(savedEntry);
 
   } catch (error) {
     alert(
@@ -4157,40 +4071,16 @@ async function handleAdminCreate(entry) {
   try {
     setSaving(true);
 
-    const savedEntry =
-      await saveAdminEntry(entry);
-
-    let finalEntry = {
-      ...savedEntry,
-      whatsappDelivered:
-        savedEntry.whatsappStatus === "Delivered" ||
-        savedEntry.whatsappStatus === "Read",
-    };
-
-    if (
-      savedEntry.phone &&
-      savedEntry.whatsappStatus === "Pending"
-    ) {
-      const delivered =
-        await waitForWhatsAppDelivery(
-          savedEntry.orderId,
-          30000
-        );
-
-      finalEntry = {
-        ...finalEntry,
-        whatsappDelivered: delivered,
-      };
-    }
+    const savedEntry = await saveAdminEntry(entry);
 
     setEntries((current) => [
       ...current,
-      finalEntry,
+      savedEntry,
     ]);
 
     setAdminCreate(false);
     setScreen("admin");
-    setSuccessEntry(finalEntry);
+    setSuccessEntry(savedEntry);
     await refreshAdmin();
   } catch (error) {
     alert(

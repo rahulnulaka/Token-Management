@@ -118,28 +118,6 @@ const TOKEN_PRICES = {
   Silver: 201,
 };
 
-const WHATSAPP_GRAPH_VERSION =
-  process.env.WHATSAPP_GRAPH_VERSION || "v23.0";
-
-const WHATSAPP_PHONE_NUMBER_ID =
-  process.env.WHATSAPP_PHONE_NUMBER_ID || "";
-
-const WHATSAPP_ACCESS_TOKEN =
-  process.env.WHATSAPP_ACCESS_TOKEN || "";
-
-const WHATSAPP_VERIFY_TOKEN =
-  process.env.WHATSAPP_VERIFY_TOKEN || "";
-
-const WHATSAPP_TEMPLATE_NAME =
-  process.env.WHATSAPP_TEMPLATE_NAME || "";
-
-const WHATSAPP_TEMPLATE_LANGUAGE =
-  process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US";
-
-const DEFAULT_PHONE_COUNTRY_CODE =
-  process.env.DEFAULT_PHONE_COUNTRY_CODE || "91";
-
-const WHATSAPP_DELIVERY_WAIT_MS = 30000;
 
 
 
@@ -300,13 +278,6 @@ function normalizeRow(row = {}) {
 
       row["Admin Notes"] ?? "",
 
-    "WhatsApp Status":
-
-      row["WhatsApp Status"] ?? "",
-
-    "WhatsApp Message ID":
-
-      row["WhatsApp Message ID"] ?? "",
 
   };
 
@@ -362,18 +333,6 @@ function toClientEntry(row) {
 
     adminNotes: String(r["Admin Notes"] || ""),
 
-    whatsappStatus: String(
-      r["WhatsApp Status"] || ""
-    ),
-
-    whatsappMessageId: String(
-      r["WhatsApp Message ID"] || ""
-    ),
-
-    whatsappDelivered:
-      ["Delivered", "Read"].includes(
-        String(r["WhatsApp Status"] || "")
-      ),
 
   };
 
@@ -703,166 +662,6 @@ function writeExcel(rows) {
 
 
 
-
-/* =========================================================
-   WHATSAPP
-========================================================= */
-
-function normalizeWhatsAppPhone(phone) {
-  const raw = String(phone || "").trim();
-
-  if (!raw) return "";
-
-  let digits = raw.replace(/\D/g, "");
-
-  if (!digits) return "";
-
-  if (digits.length === 10) {
-    digits = `${DEFAULT_PHONE_COUNTRY_CODE}${digits}`;
-  }
-
-  return digits;
-}
-
-function getTokenRangeText(entry) {
-  const start = String(entry["Token Start"] || "");
-  const end = String(entry["Token End"] || "");
-
-  return end && end !== start
-    ? `${start} - ${end}`
-    : start;
-}
-
-async function sendWhatsAppMessage(row) {
-  const phone = normalizeWhatsAppPhone(row.Phone);
-
-  if (!phone) {
-    return {
-      status: "No Phone",
-      messageId: "",
-    };
-  }
-
-  if (
-    !WHATSAPP_PHONE_NUMBER_ID ||
-    !WHATSAPP_ACCESS_TOKEN ||
-    !WHATSAPP_TEMPLATE_NAME
-  ) {
-    console.warn(
-      "WhatsApp is not configured. The order will require two printed labels."
-    );
-
-    return {
-      status: "Not Configured",
-      messageId: "",
-    };
-  }
-
-  const url =
-    `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/` +
-    `${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization:
-        `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "template",
-      template: {
-        name: WHATSAPP_TEMPLATE_NAME,
-        language: {
-          code: WHATSAPP_TEMPLATE_LANGUAGE,
-        },
-        components: [
-          {
-            type: "body",
-            parameters: [
-              {
-                type: "text",
-                text: String(row.Name || ""),
-              },
-              {
-                type: "text",
-                text: getTokenRangeText(row),
-              },
-              {
-                type: "text",
-                text: String(row["Token Type"] || ""),
-              },
-              {
-                type: "text",
-                text: String(row.Quantity || ""),
-              },
-              {
-                type: "text",
-                text:
-                  `₹${Number(row.Amount || 0).toFixed(2)}`,
-              },
-              {
-                type: "text",
-                text: String(row.Payment || ""),
-              },
-            ],
-          },
-        ],
-      },
-    }),
-  });
-
-  const payload =
-    await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    console.error(
-      "WhatsApp send failed:",
-      payload
-    );
-
-    return {
-      status: "Failed",
-      messageId: "",
-    };
-  }
-
-  return {
-    status: "Pending",
-    messageId:
-      payload?.messages?.[0]?.id || "",
-  };
-}
-
-async function updateWhatsAppStatusByMessageId(
-  messageId,
-  status
-) {
-  if (!messageId) return;
-
-  await withExcelAllocationLock(() => {
-    const rows = readExcel();
-
-    const index = rows.findIndex(
-      (raw) =>
-        String(
-          normalizeRow(raw)["WhatsApp Message ID"] || ""
-        ) === String(messageId)
-    );
-
-    if (index < 0) return;
-
-    const row = normalizeRow(rows[index]);
-
-    row["WhatsApp Status"] = status;
-
-    rows[index] = row;
-
-    writeExcel(rows);
-  });
-}
 
 /* =========================================================
 
@@ -1724,10 +1523,6 @@ async function createOrder(entry) {
 
         "Admin Notes": "",
 
-        "WhatsApp Status":
-          phone ? "Pending" : "No Phone",
-
-        "WhatsApp Message ID": "",
       };
 
       rows.push(row);
@@ -1736,40 +1531,6 @@ async function createOrder(entry) {
 
       return row;
     });
-
-  const whatsapp =
-    await sendWhatsAppMessage(newRow);
-
-  newRow["WhatsApp Status"] =
-    whatsapp.status;
-
-  newRow["WhatsApp Message ID"] =
-    whatsapp.messageId || "";
-
-  await withExcelAllocationLock(() => {
-    const rows = readExcel();
-
-    const index = rows.findIndex(
-      (raw) =>
-        String(
-          normalizeRow(raw)["Order ID"]
-        ) === String(newRow["Order ID"])
-    );
-
-    if (index >= 0) {
-      const row = normalizeRow(rows[index]);
-
-      row["WhatsApp Status"] =
-        whatsapp.status;
-
-      row["WhatsApp Message ID"] =
-        whatsapp.messageId || "";
-
-      rows[index] = row;
-
-      writeExcel(rows);
-    }
-  });
 
   return toClientEntry(newRow);
 }
@@ -1831,148 +1592,6 @@ app.post(
             err.message ||
             "Failed to create admin token.",
         });
-    }
-  }
-);
-
-/* =========================================================
-   WHATSAPP STATUS
-========================================================= */
-
-app.get(
-  "/whatsapp/status/:orderId",
-  async (req, res) => {
-    try {
-      const orderId =
-        String(req.params.orderId || "");
-
-      const rows = readExcel();
-
-      const row = rows.find(
-        (raw) =>
-          String(
-            normalizeRow(raw)["Order ID"]
-          ) === orderId
-      );
-
-      if (!row) {
-        return res
-          .status(404)
-          .json({
-            error: "Registration not found.",
-          });
-      }
-
-      const normalized =
-        normalizeRow(row);
-
-      res.json({
-        orderId,
-        status:
-          normalized["WhatsApp Status"] ||
-          "Not Configured",
-        delivered:
-          ["Delivered", "Read"].includes(
-            normalized["WhatsApp Status"]
-          ),
-      });
-    } catch (err) {
-      res
-        .status(500)
-        .json({
-          error:
-            "Unable to read WhatsApp status.",
-        });
-    }
-  }
-);
-
-/* =========================================================
-   WHATSAPP WEBHOOK
-========================================================= */
-
-app.get(
-  "/webhooks/whatsapp",
-  (req, res) => {
-    const mode =
-      String(req.query["hub.mode"] || "");
-
-    const token =
-      String(
-        req.query["hub.verify_token"] || ""
-      );
-
-    const challenge =
-      String(
-        req.query["hub.challenge"] || ""
-      );
-
-    if (
-      mode === "subscribe" &&
-      token === WHATSAPP_VERIFY_TOKEN
-    ) {
-      return res
-        .status(200)
-        .send(challenge);
-    }
-
-    return res.sendStatus(403);
-  }
-);
-
-app.post(
-  "/webhooks/whatsapp",
-  async (req, res) => {
-    try {
-      const body = req.body || {};
-
-      for (const entry of body.entry || []) {
-        for (const change of entry.changes || []) {
-          const value = change.value || {};
-
-          for (
-            const statusItem of
-            value.statuses || []
-          ) {
-            const status =
-              String(
-                statusItem.status || ""
-              ).toLowerCase();
-
-            let mappedStatus = "";
-
-            if (status === "sent") {
-              mappedStatus = "Sent";
-            } else if (
-              status === "delivered"
-            ) {
-              mappedStatus = "Delivered";
-            } else if (status === "read") {
-              mappedStatus = "Read";
-            } else if (
-              status === "failed"
-            ) {
-              mappedStatus = "Failed";
-            }
-
-            if (mappedStatus) {
-              await updateWhatsAppStatusByMessageId(
-                statusItem.id,
-                mappedStatus
-              );
-            }
-          }
-        }
-      }
-
-      res.sendStatus(200);
-    } catch (err) {
-      console.error(
-        "WhatsApp webhook error:",
-        err.message
-      );
-
-      res.sendStatus(200);
     }
   }
 );
