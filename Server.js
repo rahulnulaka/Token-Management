@@ -295,6 +295,28 @@ function normalizeRow(row = {}) {
 
 
 
+function parseEntryAmount(row, tokenType, quantity) {
+
+  const raw = row?.Amount;
+
+  const numeric =
+    typeof raw === "number"
+      ? raw
+      : Number(String(raw ?? "").replace(/[₹,\s]/g, ""));
+
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric;
+  }
+
+  const fallbackPrices = {
+    Bullet: 301,
+    Saree: 101,
+    Silver: 201,
+  };
+
+  return (fallbackPrices[tokenType] || 0) * (Number(quantity) || 0);
+}
+
 function toClientEntry(row) {
 
   const r = normalizeRow(row);
@@ -321,7 +343,7 @@ function toClientEntry(row) {
 
     payment: String(r.Payment || ""),
 
-    amount: Number(r.Amount) || 0,
+    amount: parseEntryAmount(r, String(r["Token Type"] || ""), r.Quantity),
 
     date: String(r.Date || ""),
 

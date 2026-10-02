@@ -19,6 +19,7 @@ const TOKEN_TYPES = {
     icon: "🏍️",
     accent: "#7c3aed",
     light: "#f5f3ff",
+    price: 301,
   },
 
   Saree: {
@@ -27,6 +28,7 @@ const TOKEN_TYPES = {
     icon: "🥻",
     accent: "#db2777",
     light: "#fdf2f8",
+    price: 101,
   },
 
   Silver: {
@@ -35,6 +37,7 @@ const TOKEN_TYPES = {
     icon: "🥈",
     accent: "#475569",
     light: "#f8fafc",
+    price: 201,
   },
 };
 
@@ -193,6 +196,19 @@ async function saveAdminEntry(entry) {
 
 function getTokenConfig(type) {
   return TOKEN_TYPES[type] || TOKEN_TYPES.Bullet;
+}
+
+function getEntryAmount(entry) {
+  const amount = Number(entry?.amount);
+
+  if (Number.isFinite(amount)) {
+    return amount;
+  }
+
+  const quantity = Number(entry?.quantity) || 0;
+  const price = Number(getTokenConfig(entry?.tokenType).price) || 0;
+
+  return price * quantity;
 }
 
 
@@ -1399,7 +1415,7 @@ function SuccessModal({
 
           <div style={successRow}>
             <span>Amount</span>
-            <strong>₹{Number(entry.amount || 0).toFixed(2)}</strong>
+            <strong>₹{getEntryAmount(entry).toFixed(2)}</strong>
           </div>
 
 
@@ -2928,7 +2944,7 @@ function Dashboard({
 
 
                           <td style={tableCell}>
-                            ₹{Number(entry.amount || 0).toFixed(2)}
+                            ₹{getEntryAmount(entry).toFixed(2)}
                           </td>
 
 
@@ -3266,9 +3282,9 @@ function AdminReceived({
         >
           <StatCard
             label="TOTAL AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.totalAmountReceived || 0
-            ).toFixed(2)}`}
+            value={`₹${Number.isFinite(Number(adminSummary?.totalAmountReceived))
+              ? Number(adminSummary.totalAmountReceived).toFixed(2)
+              : "0.00"}`}
             icon="💰"
           />
 
@@ -3328,25 +3344,25 @@ function AdminReceived({
         >
           <StatCard
             label="BULLET AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Bullet || 0
-            ).toFixed(2)}`}
+            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Bullet))
+              ? Number(adminSummary.amountReceivedByCategory.Bullet).toFixed(2)
+              : "0.00"}`}
             icon="🎯"
           />
 
           <StatCard
             label="SAREE AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Saree || 0
-            ).toFixed(2)}`}
+            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Saree))
+              ? Number(adminSummary.amountReceivedByCategory.Saree).toFixed(2)
+              : "0.00"}`}
             icon="🥻"
           />
 
           <StatCard
             label="SILVER AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Silver || 0
-            ).toFixed(2)}`}
+            value={`₹${Number.isFinite(Number(adminSummary?.amountReceivedByCategory?.Silver))
+              ? Number(adminSummary.amountReceivedByCategory.Silver).toFixed(2)
+              : "0.00"}`}
             icon="🥈"
           />
         </div>
