@@ -1507,7 +1507,7 @@ function FormScreen({
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
 
   const [errors, setErrors] = useState({});
   const [showPayment, setShowPayment] = useState(false);
@@ -3896,7 +3896,7 @@ function AdminLoginModal({ onClose, onSuccess }) {
 }
 
 function CancelTokenModal({ entry, onCancel, onConfirm }) {
-  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
