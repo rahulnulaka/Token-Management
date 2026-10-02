@@ -176,6 +176,64 @@ async function saveEntry(entry) {
 }
 
 
+
+async function saveAdminEntry(entry) {
+  const result = await adminFetch("/admin/entries", {
+    method: "POST",
+    body: JSON.stringify(entry),
+  });
+
+  return result.entry || result;
+}
+
+async function getWhatsAppStatus(orderId) {
+  const res = await fetch(
+    `${API}/whatsapp/status/${encodeURIComponent(orderId)}`
+  );
+
+  const payload = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error || "Unable to check WhatsApp status."
+    );
+  }
+
+  return payload;
+}
+
+async function waitForWhatsAppDelivery(orderId, timeoutMs = 30000) {
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const status = await getWhatsAppStatus(orderId);
+
+      if (
+        status.status === "Delivered" ||
+        status.status === "Read"
+      ) {
+        return true;
+      }
+
+      if (
+        status.status === "Failed" ||
+        status.status === "No Phone" ||
+        status.status === "Not Configured"
+      ) {
+        return false;
+      }
+    } catch (error) {
+      console.error("WhatsApp status check failed:", error);
+      return false;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  return false;
+}
+
 /* =========================================================
    TOKEN HELPERS
 ========================================================= */
@@ -585,43 +643,32 @@ function printLabels(entry) {
   const time = escapeHtml(entry.time);
 
   /*
-   * Create TWO identical labels for every token.
-   *
-   * Example:
-   *
-   * BUL0016
-   * BUL0016
-   *
-   * BUL0017
-   * BUL0017
-   *
-   * BUL0018
-   * BUL0018
+   * WhatsApp-delivered orders need ONE label per token.
+   * Orders without a phone number or without confirmed delivery
+   * need TWO labels per token.
    */
+  const copiesPerToken =
+    entry.whatsappDelivered === true ||
+    entry.whatsappStatus === "Delivered" ||
+    entry.whatsappStatus === "Read"
+      ? 1
+      : 2;
 
   const labels = tokenIds
-    .map(
-      (tokenId) => `
-        ${createLabelHtml({
-          tokenId,
-          category,
-          name,
-          phone,
-          payment,
-          date,
-          time,
-        })}
-
-        ${createLabelHtml({
-          tokenId,
-          category,
-          name,
-          phone,
-          payment,
-          date,
-          time,
-        })}
-      `
+    .map((tokenId) =>
+      Array.from(
+        { length: copiesPerToken },
+        () =>
+          createLabelHtml({
+            tokenId,
+            category,
+            name,
+            phone,
+            payment,
+            date,
+            time,
+          })
+      ).join("")
     )
     .join("");
 
@@ -1429,6 +1476,18 @@ function SuccessModal({
           </div>
 
           <div style={successRow}>
+            <span>Amount</span>
+            <strong>₹{Number(entry.amount || 0).toFixed(2)}</strong>
+          </div>
+
+          <div style={successRow}>
+            <span>WhatsApp</span>
+            <strong>
+              {entry.whatsappStatus || (entry.phone ? "Pending" : "No Phone")}
+            </strong>
+          </div>
+
+          <div style={successRow}>
             <span>Date</span>
             <strong>{entry.date}</strong>
           </div>
@@ -1503,14 +1562,15 @@ function FormScreen({
   entries,
   onSubmit,
   onBack,
+  adminMode = false,
 }) {
-  const config = getTokenConfig(type);
+  const [selectedType, setSelectedType] = useState(type);
+  const config = getTokenConfig(selectedType);
 
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [amount, setAmount] = useState("");
 
   const [errors, setErrors] = useState({});
   const [showPayment, setShowPayment] = useState(false);
@@ -1528,17 +1588,17 @@ function FormScreen({
 
 const nextSerial = nextTokenSerial(
   entries,
-  type,
+  selectedType,
   safeQuantity
 );
 
 const previewStart = makeTokenId(
-  type,
+  selectedType,
   nextSerial
 );
 
 const previewEnd = makeTokenId(
-  type,
+  selectedType,
   nextSerial + safeQuantity - 1
 );
 
@@ -1570,10 +1630,8 @@ const previewEnd = makeTokenId(
         "Enter a valid email address.";
     }
 
-    if (!phone.trim()) {
-      validationErrors.phone =
-        "Phone number is required.";
-    } else if (
+    if (
+      phone.trim() &&
       !/^\+?[\d\s\-()]{7,15}$/.test(
         phone
       )
@@ -1581,15 +1639,6 @@ const previewEnd = makeTokenId(
       validationErrors.phone =
         "Enter a valid phone number.";
     }
-
-    if (
-  amount === "" ||
-  !Number.isFinite(Number(amount)) ||
-  Number(amount) < 0
-) {
-  validationErrors.amount =
-    "Enter a valid amount.";
-}
 
     setErrors(validationErrors);
 
@@ -1628,7 +1677,7 @@ function handlePayment(mode) {
   const entry = {
 
     tokenType:
-      type,
+      selectedType,
 
     quantity:
       Number(quantity),
@@ -1644,7 +1693,6 @@ function handlePayment(mode) {
 
     payment:
       mode,
-    amount: Number(amount),
   };
 
 
@@ -1890,8 +1938,8 @@ function handlePayment(mode) {
 
               <label style={S.label}>
                 Phone Number{" "}
-                <span style={{ color: "#ef4444" }}>
-                  *
+                <span style={{ color: "#94a3b8" }}>
+                  (optional)
                 </span>
               </label>
 
@@ -1961,42 +2009,98 @@ function handlePayment(mode) {
 
             </div>
             
-            {/* AMOUNT */}
+            {adminMode && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={S.label}>
+                  Token Category
+                </label>
 
-<div style={{ marginBottom: 18 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(3, minmax(0, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {Object.keys(TOKEN_TYPES).map((tokenType) => {
+                    const item = TOKEN_TYPES[tokenType];
+                    const active =
+                      selectedType === tokenType;
 
-  <label style={S.label}>
-    Amount{" "}
-    <span style={{ color: "#ef4444" }}>
-      *
-    </span>
-  </label>
+                    return (
+                      <button
+                        key={tokenType}
+                        type="button"
+                        onClick={() =>
+                          setSelectedType(tokenType)
+                        }
+                        style={{
+                          ...S.button,
+                          padding: "14px 10px",
+                          background: active
+                            ? item.light
+                            : "#fff",
+                          color: active
+                            ? item.accent
+                            : "#475569",
+                          border: active
+                            ? `2px solid ${item.accent}`
+                            : "1px solid #d1d5db",
+                        }}
+                      >
+                        <div style={{ fontSize: 22 }}>
+                          {item.icon}
+                        </div>
+                        <div style={{ marginTop: 5 }}>
+                          {item.label}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 11,
+                            fontWeight: 800,
+                          }}
+                        >
+                          ₹{item.price}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-  <input
-    type="number"
-    min="0"
-    step="0.01"
-    inputMode="decimal"
-    value={amount}
-    onChange={(e) =>
-      setAmount(e.target.value)
-    }
-    placeholder="Enter amount"
-    style={{
-      ...S.input,
-      borderColor: errors.amount
-        ? "#ef4444"
-        : "#d1d5db",
-    }}
-  />
+            {/* CALCULATED AMOUNT */}
 
-  {errors.amount && (
-    <div style={S.error}>
-      {errors.amount}
-    </div>
-  )}
-
-</div>
+            <div
+              style={{
+                marginBottom: 18,
+                padding: "14px 16px",
+                borderRadius: 12,
+                background: "#f8fafc",
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
+                  TOTAL AMOUNT
+                </span>
+                <strong style={{ fontSize: 22, color: config.accent }}>
+                  ₹{(config.price * safeQuantity).toFixed(2)}
+                </strong>
+              </div>
+              <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>
+                ₹{config.price} × {safeQuantity} token{safeQuantity > 1 ? "s" : ""}
+              </div>
+            </div>
 
             {/* QUANTITY */}
 
@@ -3108,6 +3212,7 @@ function AdminReceived({
   onDownload,
   onClear,
   onLogout,
+  onCreate,
 }) {
   return (
     <div style={S.page}>
@@ -3297,6 +3402,18 @@ function AdminReceived({
                 flexWrap: "wrap",
               }}
             >
+
+              <button
+                onClick={onCreate}
+                style={{
+                  ...S.button,
+                  padding: "9px 13px",
+                  background: "#7c3aed",
+                  color: "#fff",
+                }}
+              >
+                ➕ Create Token
+              </button>
 
               <button
                 onClick={onRefresh}
@@ -3897,6 +4014,9 @@ export default function App() {
 const [adminSummary, setAdminSummary] =
   useState(null);
 
+  const [adminCreate, setAdminCreate] =
+    useState(false);
+
 
   useEffect(() => {
     loadEntries()
@@ -3989,13 +4109,36 @@ async function handleSubmit(entry) {
 
     const savedEntry = await saveEntry(entry);
 
+    let finalEntry = {
+      ...savedEntry,
+      whatsappDelivered:
+        savedEntry.whatsappStatus === "Delivered" ||
+        savedEntry.whatsappStatus === "Read",
+    };
+
+    if (
+      savedEntry.phone &&
+      savedEntry.whatsappStatus === "Pending"
+    ) {
+      const delivered =
+        await waitForWhatsAppDelivery(
+          savedEntry.orderId,
+          30000
+        );
+
+      finalEntry = {
+        ...finalEntry,
+        whatsappDelivered: delivered,
+      };
+    }
+
     setEntries((current) => [
       ...current,
-      savedEntry,
+      finalEntry,
     ]);
 
     setScreen("dashboard");
-    setSuccessEntry(savedEntry);
+    setSuccessEntry(finalEntry);
 
   } catch (error) {
     alert(
@@ -4007,6 +4150,57 @@ async function handleSubmit(entry) {
   }
 }
 
+
+async function handleAdminCreate(entry) {
+  if (saving) return;
+
+  try {
+    setSaving(true);
+
+    const savedEntry =
+      await saveAdminEntry(entry);
+
+    let finalEntry = {
+      ...savedEntry,
+      whatsappDelivered:
+        savedEntry.whatsappStatus === "Delivered" ||
+        savedEntry.whatsappStatus === "Read",
+    };
+
+    if (
+      savedEntry.phone &&
+      savedEntry.whatsappStatus === "Pending"
+    ) {
+      const delivered =
+        await waitForWhatsAppDelivery(
+          savedEntry.orderId,
+          30000
+        );
+
+      finalEntry = {
+        ...finalEntry,
+        whatsappDelivered: delivered,
+      };
+    }
+
+    setEntries((current) => [
+      ...current,
+      finalEntry,
+    ]);
+
+    setAdminCreate(false);
+    setScreen("admin");
+    setSuccessEntry(finalEntry);
+    await refreshAdmin();
+  } catch (error) {
+    alert(
+      error.message ||
+        "Unable to create token."
+    );
+  } finally {
+    setSaving(false);
+  }
+}
 
 function handleClear() {
   if (!entries.length) {
@@ -4385,6 +4579,25 @@ alert(
     onLogout={
       logoutAdmin
     }
+
+    onCreate={() => {
+      setActiveType("Bullet");
+      setAdminCreate(true);
+      setScreen("admin-create");
+    }}
+  />
+
+) : screen === "admin-create" ? (
+
+  <FormScreen
+    type={activeType}
+    entries={entries}
+    onSubmit={handleAdminCreate}
+    onBack={() => {
+      setAdminCreate(false);
+      setScreen("admin");
+    }}
+    adminMode
   />
 
 ) : (
