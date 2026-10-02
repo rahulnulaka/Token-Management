@@ -53,6 +53,70 @@ async function loadEntries() {
   return await res.json();
 }
 
+async function clearEntries(
+  username,
+  password
+) {
+  const res = await fetch(
+    `${API}/admin/clear`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        username,
+        password,
+      }),
+    }
+  );
+
+  const payload =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error ||
+        "Unable to clear registrations."
+    );
+  }
+
+  return payload;
+}
+
+async function cancelEntry(
+  orderId,
+  phone
+) {
+  const res = await fetch(
+    `${API}/entries/${encodeURIComponent(
+      orderId
+    )}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        phone,
+      }),
+    }
+  );
+
+  const payload =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      payload.error ||
+        "Unable to cancel token."
+    );
+  }
+
+  return payload.entry;
+}
 
 async function saveEntry(entry) {
   const res = await fetch(
@@ -151,26 +215,44 @@ function downloadCentralExcel() {
  * This preserves the existing sequence behavior.
  * It looks at the highest existing token number for that category.
  */
-function nextTokenSerial(entries, type) {
+function nextTokenSerial(entries, type, quantity = 1) {
+  const used = new Set();
 
-  let maxSerial = 0;
+  entries
+    .filter(
+      (entry) =>
+        entry.tokenType === type &&
+        String(entry.status || "Active").toLowerCase() !== "cancelled"
+    )
+    .forEach((entry) => {
+      const start = getSerialFromToken(entry.tokenStart);
+      const end = getSerialFromToken(entry.tokenEnd);
 
-  entries.forEach((entry) => {
-    if (entry.tokenType !== type) return;
+      if (!start || !end) return;
 
-    const startSerial = getSerialFromToken(entry.tokenStart);
-    const endSerial = getSerialFromToken(entry.tokenEnd);
+      for (let i = start; i <= end; i++) {
+        used.add(i);
+      }
+    });
 
-    maxSerial = Math.max(maxSerial, startSerial, endSerial);
+  let candidate = 1;
 
-    // Also support older ticketId-style data if present
-    if (entry.ticketId) {
-      const serial = getSerialFromToken(entry.ticketId);
-      maxSerial = Math.max(maxSerial, serial);
+  while (true) {
+    let available = true;
+
+    for (let i = candidate; i < candidate + Number(quantity); i++) {
+      if (used.has(i)) {
+        available = false;
+        break;
+      }
     }
-  });
 
-  return maxSerial + 1;
+    if (available) {
+      return candidate;
+    }
+
+    candidate++;
+  }
 }
 
 
@@ -781,6 +863,97 @@ const S = {
   },
 };
 
+const responsiveStyles = `
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  button,
+  input,
+  select {
+    max-width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    .svara-container {
+      width: 100% !important;
+      max-width: 100% !important;
+      padding: 14px !important;
+    }
+    .svara-stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+    .svara-topbar {
+      flex-wrap: wrap !important;
+      gap: 12px !important;
+    }
+
+    .svara-category-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .svara-form-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .svara-card {
+      padding: 18px !important;
+    }
+
+    .svara-dashboard-table {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .svara-dashboard-table table {
+      min-width: 850px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .svara-container {
+      padding: 10px !important;
+    }
+
+    .svara-card {
+      border-radius: 14px !important;
+      padding: 15px !important;
+    }
+    
+    .svara-modal-actions {
+    flex-direction: column !important;
+  }
+    .svara-dashboard-header {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+}
+
+.svara-dashboard-actions {
+  width: 100% !important;
+  justify-content: flex-end !important;
+}
+
+    input,
+    select {
+      font-size: 16px !important;
+    }
+  }
+`;
+
 
 /* =========================================================
    PAYMENT MODAL
@@ -1050,6 +1223,7 @@ function SuccessModal({
 
 
         <div
+          className="svara-modal-actions"
           style={{
             display: "flex",
             gap: 10,
@@ -1129,24 +1303,37 @@ function FormScreen({
   }, []);
 
 
-  const nextSerial = nextTokenSerial(
-    entries,
-    type
-  );
+ const safeQuantity =
+  Number(quantity) || 1;
 
-  const previewStart = makeTokenId(
-    type,
-    nextSerial
-  );
+const nextSerial = nextTokenSerial(
+  entries,
+  type,
+  safeQuantity
+);
 
-  const previewEnd = makeTokenId(
-    type,
-    nextSerial + quantity - 1
-  );
+const previewStart = makeTokenId(
+  type,
+  nextSerial
+);
+
+const previewEnd = makeTokenId(
+  type,
+  nextSerial + safeQuantity - 1
+);
 
 
   function validate() {
     const validationErrors = {};
+    
+    if (
+    !quantity ||
+    Number(quantity) < 1 ||
+    !Number.isInteger(Number(quantity))
+  ) {
+    validationErrors.quantity =
+      "Enter at least 1 token.";
+  }
 
     if (!name.trim()) {
       validationErrors.name =
@@ -1252,11 +1439,14 @@ function handlePayment(mode) {
       )}
 
 
-      <div style={S.container}>
+      <div
+  className="svara-container"
+  style={S.container}
+>
 
         {/* TOP BAR */}
 
-        <div style={S.topBar}>
+        <div className="svara-topbar" style={S.topBar}>
 
           <button
             onClick={onBack}
@@ -1309,6 +1499,7 @@ function handlePayment(mode) {
         {/* FORM HEADER */}
 
         <div
+          className="svara-card"
           style={{
             ...S.card,
             padding: 24,
@@ -1383,6 +1574,7 @@ function handlePayment(mode) {
         {/* MAIN FORM */}
 
         <div
+          className="svara-form-grid"
           style={{
             display: "grid",
             gridTemplateColumns:
@@ -1395,6 +1587,7 @@ function handlePayment(mode) {
           {/* CUSTOMER DETAILS */}
 
           <div
+            className="svara-card"
             style={{
               ...S.card,
               padding: 28,
@@ -1549,78 +1742,111 @@ function handlePayment(mode) {
               </label>
 
               <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0,
-                  width: 170,
-                }}
-              >
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  }}
+>
+  <button
+    type="button"
+    onClick={() =>
+      setQuantity(
+        Math.max(
+          1,
+          Number(quantity) - 1
+        )
+      )
+    }
+    style={{
+      width: 46,
+      height: 44,
+      border:
+        "1px solid #d1d5db",
+      borderRadius:
+        "10px 0 0 10px",
+      background: "#f8fafc",
+      cursor: "pointer",
+      fontSize: 20,
+    }}
+  >
+    −
+  </button>
 
-                <button
-                  onClick={() =>
-                    setQuantity(
-                      Math.max(1, quantity - 1)
-                    )
-                  }
-                  style={{
-                    width: 46,
-                    height: 44,
-                    border: "1px solid #d1d5db",
-                    borderRadius:
-                      "10px 0 0 10px",
-                    background: "#f8fafc",
-                    cursor: "pointer",
-                    fontSize: 20,
-                  }}
-                >
-                  −
-                </button>
+  <input
+    type="number"
+    min="1"
+    max="9999"
+    inputMode="numeric"
+    value={quantity}
+    onChange={(e) => {
+      const value =
+        e.target.value;
 
+      if (value === "") {
+        setQuantity("");
+        return;
+      }
 
-                <div
-                  style={{
-                    width: 78,
-                    height: 44,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderTop:
-                      "1px solid #d1d5db",
-                    borderBottom:
-                      "1px solid #d1d5db",
-                    fontWeight: 800,
-                    fontSize: 16,
-                  }}
-                >
-                  {quantity}
-                </div>
+      const number =
+        Number(value);
 
+      if (
+        Number.isInteger(number) &&
+        number >= 1
+      ) {
+        setQuantity(
+          Math.min(9999, number)
+        );
+      }
+    }}
+    style={{
+      width: 120,
+      height: 44,
+      boxSizing: "border-box",
+      border:
+        "1px solid #d1d5db",
+      borderLeft: "none",
+      borderRight: "none",
+      textAlign: "center",
+      fontWeight: 800,
+      fontSize: 16,
+      outline: "none",
+    }}
+  />
 
-                <button
-                  onClick={() =>
-                    setQuantity(
-                      Math.min(
-                        100,
-                        quantity + 1
-                      )
-                    )
-                  }
-                  style={{
-                    width: 46,
-                    height: 44,
-                    border: "1px solid #d1d5db",
-                    borderRadius:
-                      "0 10px 10px 0",
-                    background: "#f8fafc",
-                    cursor: "pointer",
-                    fontSize: 20,
-                  }}
-                >
-                  +
-                </button>
+  <button
+    type="button"
+    onClick={() =>
+      setQuantity(
+        Math.min(
+          9999,
+          Number(quantity || 1) + 1
+        )
+      )
+    }
+    style={{
+      width: 46,
+      height: 44,
+      border:
+        "1px solid #d1d5db",
+      borderRadius:
+        "0 10px 10px 0",
+      background: "#f8fafc",
+      cursor: "pointer",
+      fontSize: 20,
+    }}
+  >
+    +
+  </button>
+</div>
 
-              </div>
+{errors.quantity && (
+  <div style={S.error}>
+    {errors.quantity}
+  </div>
+)}
 
             </div>
 
@@ -1647,6 +1873,7 @@ function handlePayment(mode) {
           {/* TOKEN PREVIEW */}
 
           <div
+            className="svara-card"
             style={{
               ...S.card,
               padding: 22,
@@ -1784,6 +2011,7 @@ function Dashboard({
   onSelect,
   onExport,
   onClear,
+  onCancel,
 }) {
   const counts = {
     Bullet: 0,
@@ -1791,12 +2019,19 @@ function Dashboard({
     Silver: 0,
   };
 
-  entries.forEach((entry) => {
-    if (counts[entry.tokenType] !== undefined) {
-      counts[entry.tokenType] +=
-        Number(entry.quantity) || 0;
-    }
-  });
+ entries.forEach((entry) => {
+  if (
+    String(entry.status || "Active").toLowerCase() ===
+    "cancelled"
+  ) {
+    return;
+  }
+
+  if (counts[entry.tokenType] !== undefined) {
+    counts[entry.tokenType] +=
+      Number(entry.quantity) || 0;
+  }
+});
 
   const totalTokens =
     counts.Bullet +
@@ -1807,11 +2042,17 @@ function Dashboard({
   return (
     <div style={S.page}>
 
-      <div style={S.container}>
+      <div
+  className="svara-container"
+  style={S.container}
+>
 
         {/* HEADER */}
 
-        <div style={S.topBar}>
+        <div
+  className="svara-topbar"
+  style={S.topBar}
+>
 
           <div style={S.logo}>
 
@@ -1921,6 +2162,7 @@ function Dashboard({
         {/* CATEGORY CARDS */}
 
         <div
+          className="svara-category-grid"
           style={{
             display: "grid",
             gridTemplateColumns:
@@ -2062,6 +2304,7 @@ function Dashboard({
         {/* STATS */}
 
         <div
+          className="svara-card"
           style={{
             ...S.card,
             padding: 22,
@@ -2070,6 +2313,7 @@ function Dashboard({
         >
 
           <div
+            className="svara-stats-grid"
             style={{
               display: "grid",
               gridTemplateColumns:
@@ -2110,6 +2354,7 @@ function Dashboard({
         {/* RECENT REGISTRATIONS */}
 
         <div
+          className="svara-card"
           style={{
             ...S.card,
             marginBottom: 30,
@@ -2118,6 +2363,7 @@ function Dashboard({
         >
 
           <div
+            className="svara-dashboard-header"
             style={{
               padding:
                 "19px 22px",
@@ -2155,6 +2401,7 @@ function Dashboard({
 
 
             <div
+              className="svara-dashboard-actions"
               style={{
                 display: "flex",
                 gap: 8,
@@ -2243,6 +2490,7 @@ function Dashboard({
             </div>
           ) : (
             <div
+              className="svara-dashboard-table"
               style={{
                 overflowX: "auto",
               }}
@@ -2297,6 +2545,10 @@ function Dashboard({
 
                     <th style={tableHeader}>
                       DATE
+                    </th>
+
+                    <th style={tableHeader}>
+                      ACTION
                     </th>
 
                   </tr>
@@ -2425,6 +2677,38 @@ function Dashboard({
                             {entry.date}
                           </td>
 
+                          <td style={tableCell}>
+  {String(entry.status || "Active").toLowerCase() ===
+  "cancelled" ? (
+    <span
+      style={{
+        display: "inline-flex",
+        padding: "5px 8px",
+        borderRadius: 8,
+        fontSize: 10,
+        fontWeight: 800,
+        background: "#fef2f2",
+        color: "#b91c1c",
+      }}
+    >
+      CANCELLED
+    </span>
+  ) : (
+    <button
+      onClick={() => onCancel(entry)}
+      style={{
+        ...S.button,
+        padding: "7px 10px",
+        background: "#fef2f2",
+        color: "#b91c1c",
+        fontSize: 11,
+      }}
+    >
+      Cancel
+    </button>
+  )}
+</td>
+
                         </tr>
                       );
                     })}
@@ -2521,6 +2805,292 @@ const modalStyles = {
       "0 30px 80px rgba(0,0,0,.22)",
   },
 };
+function AdminLoginModal({ onClose, onSuccess }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    if (!username.trim() || !password) {
+      setError("Username and password are required.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await clearEntries(username.trim(), password);
+
+      onSuccess();
+    } catch (error) {
+      setError(error.message || "Invalid admin credentials.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={modalStyles.overlay}>
+      <div
+        style={{
+          ...modalStyles.modal,
+          maxWidth: 420,
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 22,
+            fontWeight: 900,
+          }}
+        >
+          Admin Login
+        </h2>
+
+        <p
+          style={{
+            color: "#64748b",
+            fontSize: 13,
+            marginTop: 7,
+            marginBottom: 22,
+          }}
+        >
+          Enter admin credentials to clear all registrations.
+        </p>
+
+        <label style={S.label}>Username</label>
+
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Admin username"
+          style={{
+            ...S.input,
+            marginBottom: 15,
+          }}
+        />
+
+        <label style={S.label}>Password</label>
+
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Admin password"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              handleLogin();
+            }
+          }}
+          style={{
+            ...S.input,
+          }}
+        />
+
+        {error && (
+          <div
+            style={{
+              color: "#dc2626",
+              fontSize: 12,
+              marginTop: 8,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          className="svara-modal-actions"
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 22,
+          }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              ...S.button,
+              flex: 1,
+              padding: "12px",
+              background: "#f3f4f6",
+              color: "#374151",
+            }}
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            style={{
+              ...S.button,
+              flex: 1,
+              padding: "12px",
+              background: "#111827",
+              color: "#fff",
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? "Checking..." : "Login & Clear"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CancelTokenModal({ entry, onCancel, onConfirm }) {
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleCancel() {
+    if (!phone.trim()) {
+      setError("Please enter the phone number.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await onConfirm(phone.trim());
+    } catch (error) {
+      setError(error.message || "Unable to cancel token.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={modalStyles.overlay}>
+      <div
+        style={{
+          ...modalStyles.modal,
+          maxWidth: 430,
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 21,
+            fontWeight: 900,
+          }}
+        >
+          Cancel Token
+        </h2>
+
+        <p
+          style={{
+            color: "#64748b",
+            fontSize: 13,
+            marginTop: 8,
+            lineHeight: 1.5,
+          }}
+        >
+          Enter the customer's phone number to confirm cancellation.
+        </p>
+
+        <div
+          style={{
+            background: "#f8fafc",
+            borderRadius: 12,
+            padding: 14,
+            margin: "18px 0",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            Order ID
+          </div>
+
+          <strong>{entry.orderId}</strong>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "#64748b",
+            }}
+          >
+            Token
+          </div>
+
+          <strong>
+            {entry.tokenStart}
+            {entry.tokenEnd &&
+            entry.tokenEnd !== entry.tokenStart
+              ? ` – ${entry.tokenEnd}`
+              : ""}
+          </strong>
+        </div>
+
+        <label style={S.label}>
+          Customer Phone Number
+        </label>
+
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter phone number"
+          autoFocus
+          style={S.input}
+        />
+
+        {error && (
+          <div
+            style={{
+              color: "#dc2626",
+              fontSize: 12,
+              marginTop: 7,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          className="svara-modal-actions"
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 22,
+          }}
+        >
+          <button
+            onClick={onCancel}
+            style={{
+              ...S.button,
+              flex: 1,
+              padding: "12px",
+              background: "#f3f4f6",
+              color: "#374151",
+            }}
+          >
+            Go Back
+          </button>
+
+          <button
+            onClick={handleCancel}
+            disabled={loading}
+            style={{
+              ...S.button,
+              flex: 1,
+              padding: "12px",
+              background: "#dc2626",
+              color: "#fff",
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? "Cancelling..." : "Cancel Token"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 const tableHeader = {
@@ -2569,6 +3139,11 @@ export default function App() {
 
   const [loadError, setLoadError] =
     useState("");
+  const [showAdminLogin, setShowAdminLogin] =
+    useState(false);
+
+  const [cancelTarget, setCancelTarget] =
+    useState(null);
 
 
   useEffect(() => {
@@ -2653,97 +3228,70 @@ export default function App() {
   loadError,
 ]);
 
-
+const [saving, setSaving] = useState(false);
 async function handleSubmit(entry) {
+  if (saving) return;
 
   try {
+    setSaving(true);
 
-    /*
-     * Server is the authority.
-     *
-     * It returns the actual token
-     * and order ID allocated from Excel.
-     */
+    const savedEntry = await saveEntry(entry);
 
-    const savedEntry =
-      await saveEntry(entry);
+    setEntries((current) => [
+      ...current,
+      savedEntry,
+    ]);
 
-
-    /*
-     * Add the server-generated
-     * entry to the dashboard.
-     */
-
-    setEntries(
-      (current) => [
-        ...current,
-        savedEntry,
-      ]
-    );
-
-
-    setScreen(
-      "dashboard"
-    );
-
-
-    /*
-     * Show the actual server-generated
-     * token in the success popup.
-     */
-
-    setSuccessEntry(
-      savedEntry
-    );
+    setScreen("dashboard");
+    setSuccessEntry(savedEntry);
 
   } catch (error) {
-
     alert(
       error.message ||
         "Unable to save registration. Please try again."
     );
-
+  } finally {
+    setSaving(false);
   }
 }
 
 
-  async function handleClear() {
-    if (
-      !window.confirm(
-        "Clear all registrations? This cannot be undone."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      const res = await fetch(
-        `${API}/entries`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!res.ok) {
-        const payload =
-          await res
-            .json()
-            .catch(() => ({}));
-
-        throw new Error(
-          payload.error ||
-            "Unable to clear registrations."
-        );
-      }
-
-      setEntries([]);
-    } catch (error) {
-      alert(
-        error.message ||
-          "Unable to clear registrations."
-      );
-    }
+  function handleClear() {
+  if (!entries.length) {
+    return;
   }
+
+  setShowAdminLogin(true);
+}
+
+async function handleCancel(entry, phone) {
+  const updatedEntry = await cancelEntry(
+    entry.orderId,
+    phone
+  );
+
+  setEntries((current) =>
+    current.map((item) =>
+      item.orderId === updatedEntry.orderId
+        ? updatedEntry
+        : item
+    )
+  );
+
+  setCancelTarget(null);
+
+ const tokenMessage =
+  updatedEntry.tokenEnd &&
+  updatedEntry.tokenEnd !== updatedEntry.tokenStart
+    ? `${updatedEntry.tokenStart} – ${updatedEntry.tokenEnd}`
+    : updatedEntry.tokenStart;
+
+alert(
+  `Token${Number(updatedEntry.quantity) > 1 ? "s" : ""} ${tokenMessage} cancelled successfully.`
+);
+}
+
+
 
 
   if (loading) {
@@ -2873,11 +3421,41 @@ async function handleSubmit(entry) {
   }
 
 
-  return (
-    <>
+ return (
+  <>
+    <style>{responsiveStyles}</style>
+    {showAdminLogin && (
+      <AdminLoginModal
+        onClose={() =>
+          setShowAdminLogin(false)
+        }
+        onSuccess={() => {
+          setEntries([]);
+          setShowAdminLogin(false);
+          alert(
+            "All registrations have been cleared."
+          );
+        }}
+      />
+    )}
 
-      {successEntry && (
-        <SuccessModal
+    {cancelTarget && (
+      <CancelTokenModal
+        entry={cancelTarget}
+        onCancel={() =>
+          setCancelTarget(null)
+        }
+        onConfirm={(phone) =>
+          handleCancel(
+            cancelTarget,
+            phone
+          )
+        }
+      />
+    )}
+
+    {successEntry && (
+      <SuccessModal
           entry={successEntry}
           onClose={() =>
             setSuccessEntry(null)
@@ -2887,15 +3465,18 @@ async function handleSubmit(entry) {
 
 
       {screen === "dashboard" ? (
-        <Dashboard
-          entries={entries}
-          onSelect={(type) => {
-            setActiveType(type);
-            setScreen("form");
-          }}
-          onExport={downloadCentralExcel}
-          onClear={handleClear}
-        />
+       <Dashboard
+  entries={entries}
+  onSelect={(type) => {
+    setActiveType(type);
+    setScreen("form");
+  }}
+  onExport={downloadCentralExcel}
+  onClear={handleClear}
+  onCancel={(entry) =>
+    setCancelTarget(entry)
+  }
+/>
       ) : (
         <FormScreen
           type={activeType}

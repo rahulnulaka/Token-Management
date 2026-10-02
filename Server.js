@@ -13,7 +13,17 @@ app.use(express.json());
 // Excel configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FILE_PATH = path.join(__dirname, "registrations.xlsx");
+const DATA_DIR =
+  process.env.DATA_DIR || path.join(__dirname, "data");
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const FILE_PATH = path.join(
+  DATA_DIR,
+  "registrations.xlsx"
+);
 const SHEET_NAME = "Registrations";
 
 const HEADERS = [
@@ -28,6 +38,8 @@ const HEADERS = [
   "Payment",
   "Date",
   "Time",
+  "Status",
+  "Cancelled At",
 ];
 
 // Available SVARA token types
@@ -135,6 +147,11 @@ function normalizeRow(row = {}) {
     Time:
       row["Time"] ??
       "",
+    Status:
+  row["Status"] ?? "Active",
+
+"Cancelled At":
+  row["Cancelled At"] ?? "",
   };
 }
 
@@ -225,38 +242,60 @@ function makeTokenId(
 }
 
 
-function getNextTokenSerial(
-  rows,
-  tokenType
-) {
-  let maxSerial = 0;
+function getNextTokenSerial(rows, tokenType, quantity) {
+  const used = new Set();
 
   rows.forEach((row) => {
+    if (row["Token Type"] !== tokenType) {
+      return;
+    }
+
     if (
-      row["Token Type"] !==
-      tokenType
+      String(row.Status || "Active").toLowerCase() ===
+      "cancelled"
     ) {
       return;
     }
 
-    const startSerial =
-      getSerialFromToken(
-        row["Token Start"]
-      );
-
-    const endSerial =
-      getSerialFromToken(
-        row["Token End"]
-      );
-
-    maxSerial = Math.max(
-      maxSerial,
-      startSerial,
-      endSerial
+    const start = getSerialFromToken(
+      row["Token Start"]
     );
+
+    const end = getSerialFromToken(
+      row["Token End"]
+    );
+
+    if (!start || !end) {
+      return;
+    }
+
+    for (let i = start; i <= end; i++) {
+      used.add(i);
+    }
   });
 
-  return maxSerial + 1;
+  let candidate = 1;
+
+  while (true) {
+    let available = true;
+
+    for (
+      let i = candidate;
+      i < candidate + quantity;
+      i++
+    ) {
+      if (used.has(i)) {
+        available = false;
+        break;
+      }
+    }
+
+    if (available) {
+      return candidate;
+    }
+
+    candidate++;
+  }
 }
 
 
@@ -421,24 +460,24 @@ function makeTokenId(tokenType, serial) {
   return `${prefix}${String(serial).padStart(4, "0")}`;
 }
 
-function getNextTokenSerial(rows, tokenType) {
-  let maxSerial = 0;
+// function getNextTokenSerial(rows, tokenType) {
+//   let maxSerial = 0;
 
-  rows.forEach((row) => {
-    if (row["Token Type"] !== tokenType) return;
+//   rows.forEach((row) => {
+//     if (row["Token Type"] !== tokenType) return;
 
-    const startSerial = getSerialFromToken(row["Token Start"]);
-    const endSerial = getSerialFromToken(row["Token End"]);
+//     const startSerial = getSerialFromToken(row["Token Start"]);
+//     const endSerial = getSerialFromToken(row["Token End"]);
 
-    maxSerial = Math.max(
-      maxSerial,
-      startSerial,
-      endSerial
-    );
-  });
+//     maxSerial = Math.max(
+//       maxSerial,
+//       startSerial,
+//       endSerial
+//     );
+//   });
 
-  return maxSerial + 1;
-}
+//   return maxSerial + 1;
+// }
 
 function getNextOrderNumber(rows) {
   let maxOrder = 0;
@@ -520,6 +559,11 @@ app.get("/entries", (req, res) => {
 
       time:
         row["Time"] || "",
+      status:
+  row.Status || "Active",
+
+cancelledAt:
+  row["Cancelled At"] || "",
     }));
 
     res.json(entries);
@@ -625,16 +669,17 @@ app.post("/entries", async (req, res) => {
 
     const quantity =
       Number(entry.quantity);
+    const MAX_QUANTITY = 9999;
 
     if (
-      !Number.isInteger(quantity) ||
-      quantity < 1
-    ) {
-      return res.status(400).json({
-        error:
-          "Quantity must be a whole number greater than 0.",
-      });
-    }
+  !Number.isInteger(quantity) ||
+  quantity < 1 ||
+  quantity > MAX_QUANTITY
+) {
+  return res.status(400).json({
+    error: `Quantity must be a whole number between 1 and ${MAX_QUANTITY}.`,
+  });
+}
 
 
     // ─────────────────────────────────────
@@ -703,7 +748,8 @@ app.post("/entries", async (req, res) => {
           const nextSerial =
             getNextTokenSerial(
               rows,
-              entry.tokenType
+              entry.tokenType,
+              quantity
             );
 
 
@@ -791,6 +837,8 @@ app.post("/entries", async (req, res) => {
 
             Time:
               time,
+            Status: "Active",
+            "Cancelled At": "",
           };
 
 
@@ -891,49 +939,6 @@ app.post("/entries", async (req, res) => {
 // DELETE /entries
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.delete(
-  "/entries",
-  (req, res) => {
-
-    try {
-
-      if (fs.existsSync(FILE_PATH)) {
-
-        assertExcelIsWritable();
-
-        fs.unlinkSync(
-          FILE_PATH
-        );
-
-        console.log(
-          "🗑️ Deleted registrations.xlsx"
-        );
-      }
-
-      res.json({
-        success: true,
-      });
-
-    } catch (err) {
-
-      console.error(
-        "❌ DELETE /entries error:",
-        err.message
-      );
-
-      const status =
-        err.statusCode || 500;
-
-      res.status(status).json({
-
-        error:
-          err.message ||
-          "Failed to clear token entries.",
-      });
-    }
-  }
-);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Health check
 // ─────────────────────────────────────────────────────────────────────────────
@@ -951,6 +956,195 @@ app.get("/test", (req, res) => {
   });
 
 });
+
+app.post(
+  "/entries/:orderId/cancel",
+  async (req, res) => {
+    try {
+      const orderId = req.params.orderId;
+      const phone = String(
+        req.body?.phone || ""
+      ).trim();
+
+      if (!phone) {
+        return res.status(400).json({
+          error: "Phone number is required.",
+        });
+      }
+
+      const updatedEntry =
+        await withExcelAllocationLock(() => {
+          const rows = readExcel();
+
+          const index = rows.findIndex(
+            (row) =>
+              String(row["Order ID"]) ===
+              String(orderId)
+          );
+
+          if (index === -1) {
+            const error = new Error(
+              "Registration not found."
+            );
+
+            error.statusCode = 404;
+            throw error;
+          }
+
+          const row = rows[index];
+
+          if (
+            String(row.Status || "Active")
+              .toLowerCase() === "cancelled"
+          ) {
+            const error = new Error(
+              "This registration is already cancelled."
+            );
+
+            error.statusCode = 400;
+            throw error;
+          }
+
+          if (
+            String(row.Phone || "").trim() !== phone
+          ) {
+            const error = new Error(
+              "Phone number does not match this registration."
+            );
+
+            error.statusCode = 401;
+            throw error;
+          }
+
+          row.Status = "Cancelled";
+
+          row["Cancelled At"] =
+            new Date().toLocaleString("en-IN");
+
+          rows[index] = row;
+
+          writeExcel(rows);
+
+          return row;
+        });
+
+      res.json({
+        success: true,
+        entry: {
+          orderId:
+            updatedEntry["Order ID"],
+          tokenType:
+            updatedEntry["Token Type"],
+          quantity:
+            updatedEntry.Quantity,
+          tokenStart:
+            updatedEntry["Token Start"],
+          tokenEnd:
+            updatedEntry["Token End"],
+          name:
+            updatedEntry.Name,
+          email:
+            updatedEntry.Email,
+          phone:
+            updatedEntry.Phone,
+          payment:
+            updatedEntry.Payment,
+          date:
+            updatedEntry.Date,
+          time:
+            updatedEntry.Time,
+          status:
+            "Cancelled",
+          cancelledAt:
+            updatedEntry["Cancelled At"],
+        },
+      });
+    } catch (err) {
+      console.error(
+        "❌ Cancel token error:",
+        err.message
+      );
+
+      res.status(
+        err.statusCode || 500
+      ).json({
+        error:
+          err.message ||
+          "Failed to cancel token.",
+      });
+    }
+  }
+);
+
+app.post(
+  "/admin/clear",
+  async (req, res) => {
+    try {
+      const username = String(
+        req.body?.username || ""
+      ).trim();
+
+      const password = String(
+        req.body?.password || ""
+      );
+
+      const expectedUsername =
+        process.env.ADMIN_USERNAME;
+
+      const expectedPassword =
+        process.env.ADMIN_PASSWORD;
+
+      if (
+        !expectedUsername ||
+        !expectedPassword
+      ) {
+        return res.status(500).json({
+          error:
+            "Admin credentials are not configured on the server.",
+        });
+      }
+
+      if (
+        username !== expectedUsername ||
+        password !== expectedPassword
+      ) {
+        return res.status(401).json({
+          error:
+            "Invalid admin credentials.",
+        });
+      }
+
+      await withExcelAllocationLock(() => {
+        assertExcelIsWritable();
+
+        const emptyWorkbookRows = [];
+
+        writeExcel(
+          emptyWorkbookRows
+        );
+      });
+
+      res.json({
+        success: true,
+        message:
+          "All registrations have been cleared.",
+      });
+    } catch (err) {
+      console.error(
+        "❌ Admin clear error:",
+        err.message
+      );
+
+      res.status(
+        err.statusCode || 500
+      ).json({
+        error:
+          err.message ||
+          "Failed to clear registrations.",
+      });
+    }
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Start server
