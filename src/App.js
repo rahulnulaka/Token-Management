@@ -19,6 +19,7 @@ const TOKEN_TYPES = {
     icon: "🏍️",
     accent: "#7c3aed",
     light: "#f5f3ff",
+    price: 301,
   },
 
   Saree: {
@@ -27,6 +28,7 @@ const TOKEN_TYPES = {
     icon: "🥻",
     accent: "#db2777",
     light: "#fdf2f8",
+    price: 101,
   },
 
   Silver: {
@@ -35,6 +37,7 @@ const TOKEN_TYPES = {
     icon: "🥈",
     accent: "#475569",
     light: "#f8fafc",
+    price: 201,
   },
 };
 
@@ -3951,7 +3954,7 @@ export default function App() {
 const [adminSummary, setAdminSummary] =
   useState(null);
 
-  const [, setAdminCreate] =
+  const [adminCreate, setAdminCreate] =
     useState(false);
 
 

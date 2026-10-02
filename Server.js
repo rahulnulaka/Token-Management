@@ -1058,19 +1058,12 @@ const ADMIN_TOKEN_SECRET =
 
 
 function base64url(value) {
-
   return Buffer
-
     .from(value)
-
     .toString("base64")
-
     .replace(/=/g, "")
-
-    .replace(/\\+/g, "-")
-
-    .replace(/\\//g, "_");
-
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 }
 
 
