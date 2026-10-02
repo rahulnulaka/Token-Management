@@ -3160,6 +3160,7 @@ function AdminReceived({
   onCreate,
   onStatusChange,
   onCancelAdmin,
+  onReprint,
 }) {
   const [filter, setFilter] = useState("all");
 
@@ -3548,168 +3549,248 @@ function AdminReceived({
                       letterSpacing: ".8px",
                     }}
                   >
-                    <th style={tableHeader}>
-                      TOKEN
-                    </th>
-                    <th style={tableHeader}>
-                      CATEGORY
-                    </th>
-                    <th style={tableHeader}>
-                      CUSTOMER
-                    </th>
-                    <th style={tableHeader}>
-                      PHONE
-                    </th>
-                    <th style={tableHeader}>
-                      QTY
-                    </th>
-                    <th style={tableHeader}>
-                      AMOUNT
-                    </th>
-                    <th style={tableHeader}>
-                      PAYMENT
-                    </th>
-                    <th style={tableHeader}>
-                      STATUS
-                    </th>
-                    <th style={tableHeader}>
-                      DATE
-                    </th>
-                    <th style={tableHeader}>
-                      ADMIN NOTES
-                    </th>
+                    <th style={tableHeader}>TOKEN</th>
+                    <th style={tableHeader}>CATEGORY</th>
+                    <th style={tableHeader}>CUSTOMER</th>
+                    <th style={tableHeader}>PHONE</th>
+                    <th style={tableHeader}>QTY</th>
+                    <th style={tableHeader}>AMOUNT</th>
+                    <th style={tableHeader}>PAYMENT</th>
+                    <th style={tableHeader}>STATUS</th>
+                    <th style={tableHeader}>DATE</th>
+                    <th style={tableHeader}>ADMIN NOTES</th>
+                    <th style={tableHeader}>ACTION</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredAdminEntries.map((entry) => (
-                    <tr
-                      key={entry.orderId}
-                      style={{
-                        borderTop:
-                          "1px solid #f1f5f9",
-                      }}
-                    >
-                      <td style={tableCell}>
-                        {entry.tokenStart}
-                        {entry.tokenEnd &&
-                        entry.tokenEnd !==
-                          entry.tokenStart
-                          ? ` – ${entry.tokenEnd}`
-                          : ""}
-                      </td>
+                  {filteredAdminEntries.map((entry, index) => {
+                    const config = getTokenConfig(entry.tokenType);
 
-                      <td style={tableCell}>
-                        {entry.tokenType}
-                      </td>
+                    const status =
+                      entry.status === "Payment Not Received"
+                        ? "Payment Not Received"
+                        : entry.status === "Cancelled"
+                        ? "Cancelled"
+                        : "Complete";
 
-                      <td style={tableCell}>
-                        {entry.name}
-                      </td>
-
-                      <td style={tableCell}>
-                        {entry.phone}
-                      </td>
-
-                      <td
+                    return (
+                      <tr
+                        key={entry.orderId || index}
                         style={{
-                          ...tableCell,
-                          textAlign: "center",
+                          borderTop: "1px solid #f1f5f9",
                         }}
                       >
-                        {entry.quantity}
-                      </td>
+                        <td style={tableCell}>
+                          <span
+                            style={{
+                              fontFamily: "monospace",
+                              fontWeight: 800,
+                              color: config.accent,
+                            }}
+                          >
+                            {entry.tokenStart}
+                          </span>
 
-                      <td style={tableCell}>
-                        ₹{Number(
-                          entry.amount || 0
-                        ).toFixed(2)}
-                      </td>
+                          {Number(entry.quantity) > 1 && (
+                            <span
+                              style={{
+                                color: "#94a3b8",
+                                fontSize: 11,
+                              }}
+                            >
+                              {" "}–{" "}{entry.tokenEnd}
+                            </span>
+                          )}
+                        </td>
 
-                      <td style={tableCell}>
-                        {entry.payment}
-                      </td>
+                        <td style={tableCell}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              background: config.light,
+                              color: config.accent,
+                              padding: "5px 8px",
+                              borderRadius: 8,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {config.icon} {entry.tokenType}
+                          </span>
+                        </td>
 
-                      <td style={tableCell}>
-                        <select
-                          value={
-                            entry.status === "Payment Not Received"
-                              ? "Payment Not Received"
-                              : entry.status === "Cancelled"
-                              ? "Cancelled"
-                              : "Complete"
-                          }
-                          disabled={entry.status === "Cancelled"}
-                          onChange={(e) =>
-                            onStatusChange(
-                              entry,
-                              e.target.value
-                            )
-                          }
+                        <td
                           style={{
-                            border: "1px solid #d1d5db",
-                            borderRadius: 8,
-                            padding: "6px 8px",
-                            fontSize: 11,
-                            background:
-                              entry.status === "Cancelled"
-                                ? "#fef2f2"
-                                : "#fff",
-                            color:
-                              entry.status === "Cancelled"
-                                ? "#b91c1c"
-                                : "#334155",
+                            ...tableCell,
+                            fontWeight: 700,
                           }}
                         >
-                          <option value="Complete">
-                            Complete
-                          </option>
-                          <option value="Payment Not Received">
-                            Payment Not Received
-                          </option>
-                        </select>
+                          {entry.name}
+                        </td>
 
-                        <button
-                          onClick={() => onCancelAdmin(entry)}
-                          disabled={entry.status === "Cancelled"}
+                        <td style={tableCell}>
+                          {entry.phone}
+                        </td>
+
+                        <td
                           style={{
-                            marginLeft: 6, border: "1px solid #fecaca", borderRadius: 8,
-                            padding: "6px 8px", fontSize: 11, background: "#fef2f2",
-                            color: "#b91c1c", cursor: entry.status === "Cancelled" ? "not-allowed" : "pointer",
-                            opacity: entry.status === "Cancelled" ? 0.5 : 1,
+                            ...tableCell,
+                            textAlign: "center",
                           }}
-                        >Cancel</button>
+                        >
+                          {entry.quantity}
+                        </td>
 
-                      </td>
+                        <td style={tableCell}>
+                          ₹{Number(entry.amount || 0).toFixed(2)}
+                        </td>
 
-                      <td style={tableCell}>
-                        {entry.date}
-                      </td>
+                        <td style={tableCell}>
+                          {entry.payment}
+                        </td>
 
-                      <td style={tableCell}>
-                        <input
-                          defaultValue={
-                            entry.adminNotes || ""
-                          }
-                          onBlur={(e) =>
-                            saveAdminNotes(
-                              entry.orderId,
-                              e.target.value
-                            )
-                          }
-                          placeholder="Add note"
-                          style={{
-                            ...S.input,
-                            minWidth: 160,
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                        <td style={tableCell}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              padding: "5px 9px",
+                              borderRadius: 8,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              whiteSpace: "nowrap",
+                              background:
+                                status === "Cancelled"
+                                  ? "#fef2f2"
+                                  : status === "Payment Not Received"
+                                  ? "#fff7ed"
+                                  : "#ecfdf5",
+                              color:
+                                status === "Cancelled"
+                                  ? "#b91c1c"
+                                  : status === "Payment Not Received"
+                                  ? "#c2410c"
+                                  : "#047857",
+                            }}
+                          >
+                            {status}
+                          </span>
+                        </td>
+
+                        <td style={tableCell}>
+                          {entry.date}
+                        </td>
+
+                        <td style={tableCell}>
+                          <input
+                            defaultValue={entry.adminNotes || ""}
+                            onBlur={(e) =>
+                              saveAdminNotes(
+                                entry.orderId,
+                                e.target.value
+                              )
+                            }
+                            placeholder="Add note"
+                            style={{
+                              ...S.input,
+                              minWidth: 150,
+                              padding: "8px 10px",
+                              fontSize: 12,
+                            }}
+                          />
+                        </td>
+
+                        <td style={tableCell}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                            }}
+                          >
+                            {status !== "Cancelled" && (
+                              <select
+                                value={status}
+                                onChange={(e) =>
+                                  onStatusChange(
+                                    entry,
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  borderRadius: 8,
+                                  padding: "6px 8px",
+                                  fontSize: 11,
+                                  background: "#fff",
+                                  color: "#334155",
+                                }}
+                              >
+                                <option value="Complete">
+                                  Complete
+                                </option>
+                                <option value="Payment Not Received">
+                                  Payment Not Received
+                                </option>
+                              </select>
+                            )}
+
+                            {onReprint && (
+                              <button
+                                onClick={() => onReprint(entry)}
+                                style={{
+                                  ...S.button,
+                                  padding: "7px 10px",
+                                  background: "#111827",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                🖨️ Reprint
+                              </button>
+                            )}
+
+                            {status === "Cancelled" ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  padding: "5px 8px",
+                                  borderRadius: 8,
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  background: "#fef2f2",
+                                  color: "#b91c1c",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                CANCELLED
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => onCancelAdmin(entry)}
+                                style={{
+                                  ...S.button,
+                                  padding: "7px 10px",
+                                  background: "#fef2f2",
+                                  color: "#b91c1c",
+                                  fontSize: 11,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-              </table>
             </div>
           )}
 
@@ -4669,6 +4750,10 @@ alert(
 
     onCancelAdmin={
       handleAdminCancel
+    }
+
+    onReprint={
+      printLabels
     }
   />
 
