@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
@@ -2049,7 +2049,7 @@ function AdminReceived({
   const activeDashboard =
     dashboards.find((d) => d.id === selectedDashboardId) || dashboard;
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!activeDashboard?.id) return;
     try {
       setError("");
@@ -2059,11 +2059,11 @@ function AdminReceived({
     } catch (e) {
       setError(e.message);
     }
-  }
+  }, [activeDashboard?.id]);
 
   useEffect(() => {
     load();
-  }, [selectedDashboardId, activeDashboard?.id]);
+  }, [load]);
 
   const filtered = entries.filter((entry) => {
     if (filter === "payment") return entry.status === "Payment Not Received";
