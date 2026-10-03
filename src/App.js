@@ -2063,7 +2063,7 @@ function AdminReceived({
 
   useEffect(() => {
     load();
-  }, [selectedDashboardId]);
+  }, [selectedDashboardId, activeDashboard?.id]);
 
   const filtered = entries.filter((entry) => {
     if (filter === "payment") return entry.status === "Payment Not Received";
@@ -2432,7 +2432,7 @@ const cell = {
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
   const [dashboards, setDashboards] = useState([]);
   const [selectedDashboard, setSelectedDashboard] = useState(null);
   const [dashboardDetails, setDashboardDetails] = useState(null);
