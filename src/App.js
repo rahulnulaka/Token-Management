@@ -1,577 +1,289 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const API =
-  process.env.REACT_APP_API_URL ||
-  "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
-/* =========================================================
-   TOKEN CONFIGURATION
-   Keep the existing token sequence:
-   Bullet -> BUL0001
-   Saree  -> SAR0001
-   Silver -> SLV0001
-========================================================= */
+const USER_TOKEN_KEY = "svara_v5_user_token";
+const ADMIN_TOKEN_KEY = "svara_v5_admin_token";
 
-const TOKEN_TYPES = {
-  Bullet: {
-    label: "Bullet",
-    prefix: "BUL",
-    icon: "🏍️",
-    accent: "#7c3aed",
-    light: "#f5f3ff",
-    price: 301,
+const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#f8fafc 0%,#f5f3ff 100%)",
+    fontFamily: "'Inter','Segoe UI',Arial,sans-serif",
+    color: "#111827",
   },
-
-  Saree: {
-    label: "Saree",
-    prefix: "SAR",
-    icon: "🥻",
-    accent: "#db2777",
-    light: "#fdf2f8",
-    price: 101,
+  container: {
+    width: "min(1180px,calc(100% - 32px))",
+    margin: "0 auto",
   },
-
-  Silver: {
-    label: "Silver",
-    prefix: "SLV",
-    icon: "🥈",
-    accent: "#475569",
-    light: "#f8fafc",
-    price: 201,
+  card: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 20,
+    boxShadow: "0 10px 35px rgba(15,23,42,.06)",
+  },
+  input: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 11,
+    border: "1px solid #d1d5db",
+    fontSize: 14,
+    outline: "none",
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+  },
+  button: {
+    border: "none",
+    cursor: "pointer",
+    borderRadius: 11,
+    fontWeight: 700,
+    fontSize: 14,
+    padding: "11px 15px",
+  },
+  label: {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#374151",
+    marginBottom: 7,
   },
 };
 
-
-/* =========================================================
-   API
-========================================================= */
-
-async function loadEntries() {
-  const res = await fetch(`${API}/entries`);
-
-  if (!res.ok) {
-    throw new Error("Unable to load registrations.");
-  }
-
-  return await res.json();
+const css = `
+* { box-sizing: border-box; }
+html, body, #root { margin:0; min-height:100%; width:100%; }
+body { overflow-x:hidden; }
+button,input,select,textarea { font:inherit; max-width:100%; }
+@media(max-width:768px) {
+  .svara-container { width:100%!important; padding:12px!important; }
+  .svara-grid-2 { grid-template-columns:1fr!important; }
+  .svara-grid-3 { grid-template-columns:1fr!important; }
+  .svara-grid-4 { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+  .svara-table-wrap { overflow-x:auto!important; }
+  .svara-table { min-width:950px; }
 }
-
-// async function clearEntries(
-//   username,
-//   password
-// ) {
-//   const res = await fetch(
-//     `${API}/admin/clear`,
-//     {
-//       method: "POST",
-//       headers: {
-//         "Content-Type":
-//           "application/json",
-//       },
-//       body: JSON.stringify({
-//         username,
-//         password,
-//       }),
-//     }
-//   );
-
-//   const payload =
-//     await res.json().catch(() => ({}));
-
-//   if (!res.ok) {
-//     throw new Error(
-//       payload.error ||
-//         "Unable to clear registrations."
-//     );
-//   }
-
-//   return payload;
-// }
-
-async function cancelEntry(
-  orderId,
-  password
-) {
-  const res = await fetch(
-    `${API}/entries/${encodeURIComponent(
-      orderId
-    )}/cancel`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify({
-        cancelPassword: password,
-      }),
-    }
-  );
-
-  const payload =
-    await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(
-      payload.error ||
-        "Unable to cancel token."
-    );
-  }
-
-  return payload.entry;
+@media(max-width:480px) {
+  .svara-grid-4 { grid-template-columns:1fr!important; }
+  .svara-actions { flex-direction:column!important; }
 }
+`;
 
-async function saveEntry(entry) {
-  const res = await fetch(
-    `${API}/entries`,
-    {
-      method: "POST",
+async function api(path, options = {}, token = null) {
+  const headers = {
+    ...(options.headers || {}),
+    "Content-Type": "application/json",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-
-      body:
-        JSON.stringify(entry),
-    }
-  );
-
-
-  if (!res.ok) {
-
-    const payload =
-      await res
-        .json()
-        .catch(() => ({}));
-
-
-    throw new Error(
-      payload.error ||
-        "Unable to save registration."
-    );
-
-  }
-
-
-  const payload =
-    await res
-      .json()
-      .catch(() => ({}));
-
-
-  /*
-   * The backend returns:
-   *
-   * {
-   *   success: true,
-   *   entry: {...}
-   * }
-   *
-   * Return the actual allocated
-   * entry to the application.
-   */
-
-  return (
-    payload.entry ||
-    payload
-  );
-}
-
-
-
-async function saveAdminEntry(entry) {
-  const result = await adminFetch("/admin/entries", {
-    method: "POST",
-    body: JSON.stringify(entry),
-  });
-
-  return result.entry || result;
-}
-
-
-/* =========================================================
-   TOKEN HELPERS
-========================================================= */
-
-function getTokenConfig(type) {
-  return TOKEN_TYPES[type] || TOKEN_TYPES.Bullet;
-}
-
-
-function makeTokenId(type, serial) {
-  const config = getTokenConfig(type);
-
-  return `${config.prefix}${String(serial).padStart(4, "0")}`;
-}
-
-
-function getSerialFromToken(token) {
-  if (!token) return 0;
-
-  const match = String(token).match(/(\d+)$/);
-
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-// function downloadCentralExcel() {
-
-//   window.open(
-//     `${API}/download-excel`,
-//     "_blank"
-//   );
-
-// }
-async function adminLogin(username, password) {
-  const res = await fetch(`${API}/admin/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      username,
-      password,
-    }),
-  });
-
-  const payload = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(
-      payload.error || "Invalid admin credentials."
-    );
-  }
-
-  return payload;
-}
-
-
-async function adminFetch(path, options = {}) {
-  const token =
-    sessionStorage.getItem("svara_admin_token");
-
-  const res = await fetch(`${API}${path}`, {
+  const response = await fetch(`${API}${path}`, {
     ...options,
-
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token || ""}`,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
-  const payload =
-    await res.json().catch(() => ({}));
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await response.json().catch(() => ({}))
+    : await response.text();
 
-  if (res.status === 401) {
-    sessionStorage.removeItem(
-      "svara_admin_token"
-    );
-
-    throw new Error(
-      "Admin session expired. Please log in again."
-    );
+  if (!response.ok) {
+    const message =
+      typeof data === "object" ? data.error || data.message : data;
+    throw new Error(message || `Request failed (${response.status}).`);
   }
 
-  if (!res.ok) {
-    throw new Error(
-      payload.error ||
-        "Admin request failed."
-    );
-  }
-
-  return payload;
+  return data;
 }
 
-
-async function clearEntries(adminToken) {
-  const res = await fetch(
-    `${API}/admin/clear`,
-    {
-      method: "POST",
-
-      headers: {
-        Authorization:
-          `Bearer ${adminToken || ""}`,
-        "Content-Type":
-          "application/json",
-      },
-    }
-  );
-
-  const payload =
-    await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(
-      payload.error ||
-        "Unable to clear registrations."
-    );
-  }
-
-  return payload;
+function getUserToken() {
+  return sessionStorage.getItem(USER_TOKEN_KEY) || "";
 }
 
-
-async function updateEntryStatus(orderId, status) {
-  const adminToken = sessionStorage.getItem("svara_admin_token");
-  const headers = { "Content-Type": "application/json" };
-  if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
-  const res = await fetch(`${API}/entries/${encodeURIComponent(orderId)}/status`, {
-    method: "POST", headers, body: JSON.stringify({ status }),
-  });
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error || "Unable to update status.");
-  return payload.entry;
+function getAdminToken() {
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || "";
 }
 
-async function adminCancelEntry(orderId) {
-  const adminToken = sessionStorage.getItem("svara_admin_token");
-  if (!adminToken) throw new Error("Admin login required.");
-  const res = await fetch(`${API}/entries/${encodeURIComponent(orderId)}/cancel`, {
+async function requestOtp(channel, contact) {
+  return api("/api/v5/auth/request-otp", {
     method: "POST",
-    headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ channel, contact }),
   });
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error || "Unable to cancel token.");
-  return payload.entry;
 }
 
-
-async function loadAdminData() {
-  return adminFetch(
-    "/admin/received"
-  );
+async function verifyOtp(channel, contact, otp) {
+  return api("/api/v5/auth/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ channel, contact, otp }),
+  });
 }
 
+async function getMe() {
+  return api("/api/v5/me", {}, getUserToken());
+}
 
-async function saveAdminNotes(
-  orderId,
-  notes
-) {
-  return adminFetch(
-    `/admin/notes/${encodeURIComponent(
-      orderId
-    )}`,
+async function getDashboards() {
+  return api("/api/v5/dashboards", {}, getUserToken());
+}
+
+async function createDashboard(payload) {
+  return api(
+    "/api/v5/dashboards",
     {
       method: "POST",
-
-      body: JSON.stringify({
-        notes,
-      }),
-    }
+      body: JSON.stringify(payload),
+    },
+    getUserToken(),
   );
 }
 
+async function createAdminCredentials(username, password) {
+  return api(
+    "/api/v5/admin/credentials",
+    {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    },
+    getUserToken(),
+  );
+}
 
-function downloadAdminExcel() {
-  const token =
-    sessionStorage.getItem(
-      "svara_admin_token"
-    );
+async function adminLogin(username, password) {
+  return api("/api/v5/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
 
+async function getDashboardDetails(dashboardId) {
+  return api(`/api/v5/token/dashboards/${dashboardId}`, {}, getUserToken());
+}
+
+async function getRegistrations(dashboardId) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/registrations`,
+    {},
+    getUserToken(),
+  );
+}
+
+async function createRegistration(dashboardId, payload) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/registrations`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    getUserToken(),
+  );
+}
+
+async function updateRegistrationStatus(dashboardId, registrationId, status) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/status`,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    },
+    getUserToken(),
+  );
+}
+
+async function cancelRegistration(dashboardId, registrationId) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+    getUserToken(),
+  );
+}
+
+async function getAdminRegistrations(dashboardId) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations`,
+    {},
+    getAdminToken(),
+  );
+}
+
+async function updateAdminStatus(dashboardId, registrationId, status) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/status`,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    },
+    getAdminToken(),
+  );
+}
+
+async function cancelAdminRegistration(dashboardId, registrationId) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+    getAdminToken(),
+  );
+}
+
+async function saveAdminNotes(dashboardId, registrationId, notes) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/notes`,
+    {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+    },
+    getAdminToken(),
+  );
+}
+
+function downloadAdminExcel(dashboardId) {
+  const token = getAdminToken();
   if (!token) {
     alert("Admin login required.");
     return;
   }
 
-  fetch(
-    `${API}/admin/download-excel`,
-    {
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
-      },
-    }
-  )
+  fetch(`${API}/api/v5/admin/dashboards/${dashboardId}/export-excel`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
     .then(async (res) => {
       if (!res.ok) {
-        const payload =
-          await res
-            .json()
-            .catch(() => ({}));
-
-        throw new Error(
-          payload.error ||
-            "Unable to download Excel."
-        );
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Unable to download Excel.");
       }
-
       return res.blob();
     })
     .then((blob) => {
-      const blobUrl =
-        URL.createObjectURL(blob);
-
-      const link =
-        document.createElement("a");
-
-      link.href = blobUrl;
-      link.download =
-        "svara-token-registrations.xlsx";
-
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "svara-token-registrations.xlsx";
       document.body.appendChild(link);
-
       link.click();
-
       link.remove();
-
-      setTimeout(
-        () =>
-          URL.revokeObjectURL(
-            blobUrl
-          ),
-        1000
-      );
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     })
-    .catch((error) => {
-      alert(
-        error.message ||
-          "Unable to download Excel."
-      );
-    });
+    .catch((error) => alert(error.message));
 }
 
-/*
- * IMPORTANT:
- * This preserves the existing sequence behavior.
- * It looks at the highest existing token number for that category.
- */
-function nextTokenSerial(entries, type, quantity = 1) {
-  const used = new Set();
-
-  entries
-    .filter(
-      (entry) =>
-        entry.tokenType === type &&
-        String(entry.status || "Active").toLowerCase() !== "cancelled"
-    )
-    .forEach((entry) => {
-      const start = getSerialFromToken(entry.tokenStart);
-      const end = getSerialFromToken(entry.tokenEnd);
-
-      if (!start || !end) return;
-
-      for (let i = start; i <= end; i++) {
-        used.add(i);
-      }
-    });
-
-  let candidate = 1;
-
-  while (true) {
-    let available = true;
-
-    for (let i = candidate; i < candidate + Number(quantity); i++) {
-      if (used.has(i)) {
-        available = false;
-        break;
-      }
-    }
-
-    if (available) {
-      return candidate;
-    }
-
-    candidate++;
-  }
+function makeTokenId(prefix, serial) {
+  return `${prefix}${String(serial).padStart(4, "0")}`;
 }
 
+function tokenRange(entry) {
+  if (!entry) return "";
+  return entry.tokenEnd && entry.tokenEnd !== entry.tokenStart
+    ? `${entry.tokenStart} – ${entry.tokenEnd}`
+    : entry.tokenStart;
+}
 
-function getTokenIds(entry) {
+function printLabels(entry, associationName = "SVARA") {
   const quantity = Number(entry.quantity) || 1;
-
-  const startSerial = getSerialFromToken(entry.tokenStart);
-
-  return Array.from(
-    { length: quantity },
-    (_, index) => makeTokenId(entry.tokenType, startSerial + index)
+  const start = Number(
+    String(entry.tokenStart || "").match(/(\d+)$/)?.[1] || 0,
   );
-}
-
-
-// function nextOrderNumber(entries) {
-//   let max = 0;
-
-//   entries.forEach((entry) => {
-//     const value = String(entry.orderId || "");
-//     const match = value.match(/(\d+)$/);
-
-//     if (match) {
-//       max = Math.max(max, parseInt(match[1], 10));
-//     }
-//   });
-
-//   return max + 1;
-// }
-
-
-/* =========================================================
-   EXCEL EXPORT
-========================================================= */
-
-// function exportToExcel(entries) {
-//   if (!entries.length) return;
-
-//   const rows = entries.map((entry) => ({
-//     "Order ID": entry.orderId || "",
-//     "Token Type": entry.tokenType || "",
-//     Quantity: entry.quantity || "",
-//     "Token Start": entry.tokenStart || "",
-//     "Token End": entry.tokenEnd || "",
-//     Name: entry.name || "",
-//     Email: entry.email || "",
-//     Phone: entry.phone || "",
-//     "Payment Mode": entry.payment || "",
-//     Date: entry.date || "",
-//     Time: entry.time || "",
-//   }));
-
-//   const worksheet = XLSX.utils.json_to_sheet(rows);
-
-//   worksheet["!cols"] = [
-//     { wch: 14 },
-//     { wch: 14 },
-//     { wch: 10 },
-//     { wch: 14 },
-//     { wch: 14 },
-//     { wch: 24 },
-//     { wch: 28 },
-//     { wch: 18 },
-//     { wch: 16 },
-//     { wch: 14 },
-//     { wch: 12 },
-//   ];
-
-//   const workbook = XLSX.utils.book_new();
-
-//   XLSX.utils.book_append_sheet(
-//     workbook,
-//     worksheet,
-//     "Registrations"
-//   );
-
-//   try {
-//     XLSX.writeFile(workbook, "SVARA-Registrations.xlsx");
-//   } catch (error) {
-//     alert("Excel file is open. Please close it before exporting.");
-//   }
-// }
-
-
-/* =========================================================
-   PRINT LABELS
-   TWO IDENTICAL LABELS FOR EVERY TOKEN
-========================================================= */
-
-/* =========================================================
-   PRINT LABELS
-   TWO IDENTICAL LABELS FOR EVERY TOKEN
-========================================================= */
-
-function printLabels(entry) {
-  const tokenIds = getTokenIds(entry);
+  const ids = Array.from({ length: quantity }, (_, i) =>
+    makeTokenId(entry.prefix || "", start + i),
+  );
 
   const escapeHtml = (value) =>
     String(value ?? "")
@@ -581,2963 +293,1498 @@ function printLabels(entry) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
-  const category = escapeHtml(entry.tokenType);
-  const name = escapeHtml(entry.name);
-  const phone = escapeHtml(entry.phone);
-  const payment = escapeHtml(entry.payment);
-  const date = escapeHtml(entry.date);
-  const time = escapeHtml(entry.time);
-
-  const copiesPerToken = 2;
-
-  const labels = tokenIds
-    .map((tokenId) =>
+  const labels = ids
+    .map((id) =>
       Array.from(
-        { length: copiesPerToken },
-        () =>
-          createLabelHtml({
-            tokenId,
-            category,
-            name,
-            phone,
-            payment,
-            date,
-            time,
-          })
-      ).join("")
+        { length: 2 },
+        () => `
+      <div class="label">
+        <div class="brand">${escapeHtml(associationName || "SVARA")}</div>
+        <div class="datetime">
+          <span>${escapeHtml(entry.date || "")}</span>
+          <span>|</span>
+          <span>${escapeHtml(entry.time || "")}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="category">${escapeHtml(entry.categoryName || entry.tokenType || "")}</div>
+        <div class="token">${escapeHtml(id)}</div>
+        <div class="row"><b>NAME</b><span>${escapeHtml(entry.name)}</span></div>
+        <div class="row"><b>PHONE</b><span>${escapeHtml(entry.phone)}</span></div>
+        <div class="row"><b>PAYMENT MODE</b><span>${escapeHtml(entry.payment)}</span></div>
+        <div class="divider"></div>
+        <div class="thanks">Thank you! 🙏</div>
+      </div>
+    `,
+      ).join(""),
     )
     .join("");
 
-  const printWindow = window.open(
-    "",
-    "_blank",
-    "width=420,height=750"
-  );
-
-  if (!printWindow) {
+  const win = window.open("", "_blank", "width=420,height=750");
+  if (!win) {
     alert("Please allow pop-ups to print the labels.");
     return;
   }
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
+  win.document.write(`
+    <!doctype html>
     <html>
-
-      <head>
-
-        <title>SVARA Token Labels</title>
-
-        <style>
-
-          * {
-            box-sizing: border-box;
-          }
-
-          html,
-          body {
-            margin: 0;
-            padding: 0;
-            background: #ffffff;
-            font-family: Arial, Helvetica, sans-serif;
-            color: #111111;
-          }
-
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
-
-          .label {
-            width: 80mm;
-            min-height: 72mm;
-
-            padding: 6mm 5mm 5mm;
-
-            display: flex;
-            flex-direction: column;
-
-            background: #ffffff;
-
-            page-break-after: always;
-            break-after: page;
-          }
-
-          .header {
-            text-align: center;
-          }
-
-          .brand {
-            font-size: 23px;
-            font-weight: 900;
-            letter-spacing: 3px;
-            margin-bottom: 5px;
-          }
-
-          .datetime {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 7px;
-
-            font-size: 10px;
-            font-weight: 600;
-            color: #555555;
-          }
-
-          .separator {
-            color: #aaaaaa;
-          }
-
-          .divider {
-            border-top: 1px dashed #aaaaaa;
-            margin: 5mm 0;
-          }
-
-          .content {
-            display: flex;
-            flex-direction: column;
-            gap: 3.2mm;
-          }
-
-          /* CATEGORY */
-
-          .category-field {
-            width: 100%;
-            text-align: center;
-          }
-
-          .category-box {
-            display: inline-block;
-
-            border: 2px solid #111111;
-
-            padding: 2.5mm 7mm;
-
-            font-size: 20px;
-            font-weight: 900;
-
-            letter-spacing: 1.5px;
-
-            margin: 0 auto;
-          }
-
-          /* TOKEN NUMBER */
-
-          .token-field {
-            padding: 1.5mm 0 2mm;
-          }
-
-          .token-number {
-            font-size: 31px;
-            font-weight: 900;
-
-            letter-spacing: 2px;
-
-            text-align: center;
-          }
-
-          /* DETAILS */
-
-          .detail-row {
-            display: flex;
-
-            align-items: center;
-
-            justify-content: space-between;
-
-            width: 100%;
-
-            gap: 8px;
-
-            font-size: 11px;
-
-            line-height: 1.5;
-          }
-
-          .field-label {
-            flex: 0 0 auto;
-
-            font-size: 9px;
-
-            font-weight: 800;
-
-            letter-spacing: 0.8px;
-
-            color: #111111;
-
-            text-align: left;
-
-            white-space: nowrap;
-          }
-
-          .field-value {
-            flex: 1;
-
-            min-width: 0;
-
-            font-size: 11px;
-
-            font-weight: 700;
-
-            color: #111111;
-
-            text-align: right;
-
-            word-break: break-word;
-          }
-
-          /* FOOTER */
-
-          .footer {
-            text-align: center;
-
-            margin-top: auto;
-          }
-
-          .thank-you {
-            font-size: 12px;
-
-            font-weight: 800;
-
-            margin-bottom: 2px;
-          }
-
-          @media print {
-
-            html,
-            body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-            }
-
-            .label {
-              page-break-after: always;
-              break-after: page;
-            }
-
-            .label:last-child {
-              page-break-after: auto;
-              break-after: auto;
-            }
-
-          }
-
-        </style>
-
-      </head>
-
-      <body>
-
-        ${labels}
-
-        <script>
-
-          window.onload = function () {
-
-            setTimeout(function () {
-
-              window.print();
-
-            }, 300);
-
-          };
-
-        </script>
-
-      </body>
-
+    <head>
+      <title>SVARA Token Labels</title>
+      <style>
+        *{box-sizing:border-box}
+        @page{size:80mm auto;margin:0}
+        body{margin:0;font-family:Arial,sans-serif;color:#111}
+        .label{width:80mm;min-height:72mm;padding:6mm 5mm 5mm;
+          display:flex;flex-direction:column;page-break-after:always}
+        .brand{text-align:center;font-size:21px;font-weight:900;letter-spacing:2px}
+        .datetime{text-align:center;margin-top:4px;font-size:10px;color:#555;display:flex;gap:7px;justify-content:center}
+        .divider{border-top:1px dashed #aaa;margin:5mm 0}
+        .category{align-self:center;border:2px solid #111;padding:2.5mm 7mm;font-size:19px;font-weight:900;text-transform:uppercase}
+        .token{text-align:center;font-family:monospace;font-size:31px;font-weight:900;letter-spacing:2px;margin:4mm 0}
+        .row{display:flex;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5;margin:2mm 0}
+        .row b{font-size:9px;white-space:nowrap}
+        .row span{text-align:right;word-break:break-word}
+        .thanks{text-align:center;font-size:12px;font-weight:800;margin-top:auto}
+      </style>
+    </head>
+    <body>
+      ${labels}
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+    </body>
     </html>
   `);
-
-  printWindow.document.close();
+  win.document.close();
 }
 
-
-function createLabelHtml({
-  tokenId,
-  category,
-  name,
-  phone,
-  payment,
-  date,
-  time,
-}) {
-  return `
-    <div class="label">
-
-      <!-- HEADER -->
-
-      <div class="header">
-
-        <div class="brand">
-          SVARA
-        </div>
-
-        <div class="datetime">
-
-          <span>${date}</span>
-
-          <span class="separator">|</span>
-
-          <span>${time}</span>
-
-        </div>
-
-      </div>
-
-
-      <div class="divider"></div>
-
-
-      <!-- CONTENT -->
-
-      <div class="content">
-
-        <!-- CATEGORY -->
-
-        <div class="category-field">
-
-          <div class="category-box">
-            ${category.toUpperCase()}
-          </div>
-
-        </div>
-
-
-        <!-- TOKEN NUMBER -->
-
-        <div class="token-field">
-
-          <div class="token-number">
-            ${tokenId}
-          </div>
-
-        </div>
-
-
-        <!-- NAME -->
-
-        <div class="detail-row">
-
-          <span class="field-label">
-            NAME
-          </span>
-
-          <span class="field-value">
-            ${name}
-          </span>
-
-        </div>
-
-
-        <!-- PHONE -->
-
-        <div class="detail-row">
-
-          <span class="field-label">
-            PHONE
-          </span>
-
-          <span class="field-value">
-            ${phone}
-          </span>
-
-        </div>
-
-
-        <!-- PAYMENT -->
-
-        <div class="detail-row">
-
-          <span class="field-label">
-            PAYMENT MODE
-          </span>
-
-          <span class="field-value">
-            ${payment}
-          </span>
-
-        </div>
-
-      </div>
-
-
-      <div class="divider"></div>
-
-
-      <!-- FOOTER -->
-
-      <div class="footer">
-
-        <div class="thank-you">
-          Thank you! 🙏
-        </div>
-
-      </div>
-
-    </div>
-  `;
-}
-
-
-/* =========================================================
-   STYLES
-========================================================= */
-
-const S = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "linear-gradient(135deg, #f8fafc 0%, #f5f3ff 100%)",
-    fontFamily:
-      "'Inter', 'Segoe UI', Arial, sans-serif",
-    color: "#111827",
-  },
-
-  container: {
-    width: "min(1180px, calc(100% - 40px))",
-    margin: "0 auto",
-  },
-
-  topBar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "24px 0",
-  },
-
-  logo: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  logoMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    background:
-      "linear-gradient(135deg, #111827, #4c1d95)",
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
-    fontWeight: 900,
-    letterSpacing: 1,
-  },
-
-  card: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 22,
-    boxShadow: "0 10px 35px rgba(15,23,42,.06)",
-  },
-
-  button: {
-    border: "none",
-    cursor: "pointer",
-    borderRadius: 12,
-    fontWeight: 700,
-    fontSize: 14,
-    transition:
-      "transform .15s ease, box-shadow .15s ease",
-  },
-
-  input: {
-    width: "100%",
-    padding: "13px 15px",
-    borderRadius: 12,
-    border: "1px solid #d1d5db",
-    background: "#fff",
-    fontSize: 14,
-    outline: "none",
-    fontFamily: "inherit",
-  },
-
-  label: {
-    display: "block",
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#374151",
-    marginBottom: 7,
-  },
-};
-
-const responsiveStyles = `
-  * {
-    box-sizing: border-box;
-  }
-
-  html,
-  body,
-  #root {
-    width: 100%;
-    min-height: 100%;
-    margin: 0;
-  }
-
-  body {
-    overflow-x: hidden;
-  }
-
-  button,
-  input,
-  select {
-    max-width: 100%;
-  }
-
-  @media (max-width: 768px) {
-    .svara-container {
-      width: 100% !important;
-      max-width: 100% !important;
-      padding: 14px !important;
-    }
-    .svara-stats-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
-
-    .svara-topbar {
-      flex-wrap: wrap !important;
-      gap: 12px !important;
-    }
-
-    .svara-category-grid {
-      grid-template-columns: 1fr !important;
-    }
-
-    .svara-form-grid {
-      grid-template-columns: 1fr !important;
-    }
-
-    .svara-card {
-      padding: 18px !important;
-    }
-
-    .svara-dashboard-table {
-      overflow-x: auto !important;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .svara-dashboard-table table {
-      min-width: 850px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .svara-container {
-      padding: 10px !important;
-    }
-
-    .svara-card {
-      border-radius: 14px !important;
-      padding: 15px !important;
-    }
-    
-    .svara-modal-actions {
-    flex-direction: column !important;
-  }
-    .svara-dashboard-header {
-  flex-direction: column !important;
-  align-items: stretch !important;
-  gap: 12px !important;
-}
-
-.svara-dashboard-actions {
-  width: 100% !important;
-  justify-content: flex-end !important;
-}
-
-    input,
-    select {
-      font-size: 16px !important;
-    }
-  }
-`;
-
-
-/* =========================================================
-   PAYMENT MODAL
-========================================================= */
-
-function PaymentModal({
-  onSelect,
-  onCancel,
-}) {
+function Field({ label, children }) {
   return (
-    <div style={modalStyles.overlay}>
-
-      <div
-        style={{
-          ...modalStyles.modal,
-          maxWidth: 460,
-        }}
-      >
-
-        <div
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: 16,
-            background: "#f5f3ff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 25,
-            margin: "0 auto 18px",
-          }}
-        >
-          💳
-        </div>
-
-        <h2
-          style={{
-            margin: 0,
-            textAlign: "center",
-            fontSize: 23,
-            fontWeight: 800,
-          }}
-        >
-          Select Payment Mode
-        </h2>
-
-        <p
-          style={{
-            textAlign: "center",
-            color: "#6b7280",
-            fontSize: 14,
-            marginTop: 8,
-            marginBottom: 26,
-          }}
-        >
-          Choose how the customer is paying
-        </p>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(2, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-
-          <button
-            onClick={() => onSelect("Cash")}
-            style={{
-              ...S.button,
-              padding: "22px 15px",
-              background: "#ecfdf5",
-              color: "#047857",
-              border: "1px solid #a7f3d0",
-            }}
-          >
-            <div style={{ fontSize: 28 }}>💵</div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 15,
-              }}
-            >
-              Cash
-            </div>
-          </button>
-
-
-          <button
-            onClick={() => onSelect("Online")}
-            style={{
-              ...S.button,
-              padding: "22px 15px",
-              background: "#eff6ff",
-              color: "#1d4ed8",
-              border: "1px solid #bfdbfe",
-            }}
-          >
-            <div style={{ fontSize: 28 }}>📱</div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 15,
-              }}
-            >
-              Online
-            </div>
-          </button>
-
-        </div>
-
-
-        <button
-          onClick={onCancel}
-          style={{
-            display: "block",
-            margin: "22px auto 0",
-            border: "none",
-            background: "transparent",
-            color: "#6b7280",
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          ← Go back
-        </button>
-
-      </div>
-
+    <div style={{ marginBottom: 15 }}>
+      <label style={styles.label}>{label}</label>
+      {children}
     </div>
   );
 }
 
+function ErrorText({ children }) {
+  return (
+    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 6 }}>
+      {children}
+    </div>
+  );
+}
 
-/* =========================================================
-   REGISTRATION SUCCESS MODAL
-========================================================= */
+function LoginScreen({ onLogin }) {
+  const [channel, setChannel] = useState("email");
+  const [contact, setContact] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState("contact");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-function SuccessModal({
-  entry,
-  onClose,
-}) {
-  const config = getTokenConfig(entry.tokenType);
-  const tokenIds = getTokenIds(entry);
+  async function sendOtp() {
+    if (!contact.trim()) {
+      setError(`Enter your ${channel}.`);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      setMessage("");
+      await requestOtp(channel, contact.trim());
+      setStep("otp");
+      setMessage(`OTP sent to your ${channel}.`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verify() {
+    if (!/^\d{6}$/.test(otp.trim())) {
+      setError("Enter the 6-digit OTP.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      const result = await verifyOtp(channel, contact.trim(), otp.trim());
+
+      sessionStorage.setItem(USER_TOKEN_KEY, result.token);
+      onLogin(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div style={modalStyles.overlay}>
-
+    <div style={styles.page}>
       <div
         style={{
-          ...modalStyles.modal,
-          maxWidth: 520,
-          textAlign: "center",
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
         }}
       >
+        <div style={{ ...styles.card, width: "min(440px,100%)", padding: 32 }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: 18,
+                background: "linear-gradient(135deg,#111827,#4c1d95)",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 24,
+                fontWeight: 900,
+                margin: "0 auto 14px",
+              }}
+            >
+              S
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
+              SVARA
+            </div>
+            <h1 style={{ margin: "8px 0 5px", fontSize: 27 }}>
+              {step === "contact" ? "Welcome back" : "Verify OTP"}
+            </h1>
+            <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+              {step === "contact"
+                ? "Sign in with your email or phone number."
+                : `Enter the OTP sent to ${contact}.`}
+            </p>
+          </div>
 
-        <div
+          {step === "contact" ? (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  marginBottom: 17,
+                }}
+              >
+                {["email", "phone"].map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => setChannel(item)}
+                    style={{
+                      ...styles.button,
+                      background: channel === item ? "#f5f3ff" : "#f8fafc",
+                      color: channel === item ? "#6d28d9" : "#64748b",
+                      border:
+                        channel === item
+                          ? "1px solid #c4b5fd"
+                          : "1px solid #e5e7eb",
+                    }}
+                  >
+                    {item === "email" ? "✉️ Email" : "📱 Phone"}
+                  </button>
+                ))}
+              </div>
+
+              <Field label={channel === "email" ? "Email" : "Phone Number"}>
+                <input
+                  autoFocus
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  placeholder={
+                    channel === "email" ? "you@example.com" : "+91 9876543210"
+                  }
+                  style={styles.input}
+                  onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+                />
+              </Field>
+
+              <button
+                onClick={sendOtp}
+                disabled={loading}
+                style={{
+                  ...styles.button,
+                  width: "100%",
+                  background: "#111827",
+                  color: "#fff",
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? "Sending..." : "Send OTP"}
+              </button>
+            </>
+          ) : (
+            <>
+              <Field label="6-digit OTP">
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) =>
+                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  style={{
+                    ...styles.input,
+                    textAlign: "center",
+                    letterSpacing: 6,
+                    fontSize: 20,
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && verify()}
+                />
+              </Field>
+
+              <button
+                onClick={verify}
+                disabled={loading}
+                style={{
+                  ...styles.button,
+                  width: "100%",
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                {loading ? "Verifying..." : "Verify & Continue"}
+              </button>
+
+              <button
+                onClick={() => {
+                  setStep("contact");
+                  setOtp("");
+                  setError("");
+                  setMessage("");
+                }}
+                style={{
+                  ...styles.button,
+                  width: "100%",
+                  background: "transparent",
+                  color: "#64748b",
+                  marginTop: 8,
+                }}
+              >
+                ← Change email / phone
+              </button>
+            </>
+          )}
+
+          {message && (
+            <div style={{ color: "#047857", fontSize: 12, marginTop: 10 }}>
+              {message}
+            </div>
+          )}
+          {error && <ErrorText>{error}</ErrorText>}
+
+          <div
+            style={{
+              marginTop: 22,
+              color: "#94a3b8",
+              fontSize: 11,
+              textAlign: "center",
+            }}
+          >
+            Your account and dashboards are stored in PostgreSQL.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardSetup({ onCreated, onCancel, existingCount }) {
+  const [associationName, setAssociationName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [categories, setCategories] = useState([
+    { name: "", prefix: "", price: "" },
+  ]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function addCategory() {
+    setCategories((items) => [...items, { name: "", prefix: "", price: "" }]);
+  }
+
+  function updateCategory(index, key, value) {
+    setCategories((items) =>
+      items.map((item, i) => (i === index ? { ...item, [key]: value } : item)),
+    );
+  }
+
+  function removeCategory(index) {
+    setCategories((items) => items.filter((_, i) => i !== index));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (!associationName.trim()) {
+      setError("Association name is required.");
+      return;
+    }
+
+    const clean = categories.map((c) => ({
+      name: c.name.trim(),
+      prefix: c.prefix.trim().toUpperCase(),
+      price: Number(c.price),
+    }));
+
+    if (
+      !clean.length ||
+      clean.some(
+        (c) => !c.name || !c.prefix || !Number.isFinite(c.price) || c.price < 0,
+      )
+    ) {
+      setError("Enter a name, prefix and valid price for every category.");
+      return;
+    }
+
+    if (new Set(clean.map((c) => c.name.toLowerCase())).size !== clean.length) {
+      setError("Category names must be unique.");
+      return;
+    }
+
+    if (new Set(clean.map((c) => c.prefix)).size !== clean.length) {
+      setError("Category prefixes must be unique.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await createDashboard({
+        associationName: associationName.trim(),
+        contactPhone: contactPhone.trim(),
+        contactEmail: contactEmail.trim(),
+        address: address.trim(),
+        description: description.trim(),
+        categories: clean,
+      });
+
+      onCreated(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={styles.page}>
+      <div
+        className="svara-container"
+        style={{ ...styles.container, paddingTop: 25, paddingBottom: 50 }}
+      >
+        <div style={{ ...styles.card, padding: 28 }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#7c3aed",
+              fontWeight: 900,
+              letterSpacing: 1.3,
+            }}
+          >
+            DASHBOARD {existingCount + 1} OF 2
+          </div>
+          <h1 style={{ margin: "7px 0", fontSize: 28 }}>
+            Create your dashboard
+          </h1>
+          <p style={{ color: "#64748b", fontSize: 13, marginTop: 0 }}>
+            Define the association details and token categories for this
+            dashboard.
+          </p>
+
+          <form onSubmit={submit}>
+            <div
+              className="svara-grid-2"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 15,
+              }}
+            >
+              <Field label="Association Name *">
+                <input
+                  value={associationName}
+                  onChange={(e) => setAssociationName(e.target.value)}
+                  style={styles.input}
+                  placeholder="SVARA Association"
+                />
+              </Field>
+              <Field label="Contact Phone">
+                <input
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  style={styles.input}
+                  placeholder="+91..."
+                />
+              </Field>
+              <Field label="Contact Email">
+                <input
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  style={styles.input}
+                  placeholder="association@example.com"
+                />
+              </Field>
+              <Field label="Description">
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  style={styles.input}
+                  placeholder="Optional description"
+                />
+              </Field>
+            </div>
+
+            <Field label="Address">
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                rows={3}
+                style={{ ...styles.input, resize: "vertical" }}
+              />
+            </Field>
+
+            <div
+              style={{
+                marginTop: 8,
+                marginBottom: 12,
+                fontSize: 16,
+                fontWeight: 900,
+              }}
+            >
+              Token Categories
+            </div>
+
+            {categories.map((category, index) => (
+              <div
+                key={index}
+                className="svara-grid-3"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr .8fr .8fr auto",
+                  gap: 10,
+                  alignItems: "end",
+                  padding: 13,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 14,
+                  marginBottom: 10,
+                }}
+              >
+                <Field label={`Category ${index + 1}`}>
+                  <input
+                    value={category.name}
+                    onChange={(e) =>
+                      updateCategory(index, "name", e.target.value)
+                    }
+                    style={styles.input}
+                    placeholder="Bullet"
+                  />
+                </Field>
+                <Field label="Prefix">
+                  <input
+                    value={category.prefix}
+                    onChange={(e) =>
+                      updateCategory(index, "prefix", e.target.value)
+                    }
+                    style={styles.input}
+                    placeholder="BUL"
+                    maxLength={8}
+                  />
+                </Field>
+                <Field label="Price">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={category.price}
+                    onChange={(e) =>
+                      updateCategory(index, "price", e.target.value)
+                    }
+                    style={styles.input}
+                    placeholder="301"
+                  />
+                </Field>
+                <button
+                  type="button"
+                  onClick={() => removeCategory(index)}
+                  disabled={categories.length === 1}
+                  style={{
+                    ...styles.button,
+                    background: "#fef2f2",
+                    color: "#b91c1c",
+                    marginBottom: 15,
+                    opacity: categories.length === 1 ? 0.4 : 1,
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addCategory}
+              style={{
+                ...styles.button,
+                background: "#f5f3ff",
+                color: "#6d28d9",
+              }}
+            >
+              + Add Category
+            </button>
+
+            {error && <ErrorText>{error}</ErrorText>}
+
+            <div
+              className="svara-actions"
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+                marginTop: 25,
+              }}
+            >
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  style={{
+                    ...styles.button,
+                    background: "#f3f4f6",
+                    color: "#374151",
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                disabled={loading}
+                style={{
+                  ...styles.button,
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                {loading ? "Creating..." : "Create Dashboard"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminCredentialsSetup({ onDone, onSkip }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    if (!username.trim() || password.length < 8) {
+      setError(
+        "Username is required and password must be at least 8 characters.",
+      );
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      await createAdminCredentials(username.trim(), password);
+      onDone();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal>
+      <h2 style={{ margin: 0 }}>Set Admin Credentials</h2>
+      <p style={{ color: "#64748b", fontSize: 13 }}>
+        One admin account is shared across all dashboards under your account.
+      </p>
+
+      <Field label="Admin Username">
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          style={styles.input}
+          placeholder="admin"
+        />
+      </Field>
+      <Field label="Password">
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={styles.input}
+        />
+      </Field>
+      <Field label="Confirm Password">
+        <input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          style={styles.input}
+        />
+      </Field>
+
+      {error && <ErrorText>{error}</ErrorText>}
+
+      <div
+        className="svara-actions"
+        style={{ display: "flex", gap: 10, marginTop: 20 }}
+      >
+        <button
+          onClick={onSkip}
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: "50%",
-            background: "#ecfdf5",
-            color: "#059669",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 30,
-            margin: "0 auto 16px",
+            ...styles.button,
+            flex: 1,
+            background: "#f3f4f6",
+            color: "#374151",
           }}
         >
-          ✓
+          Later
+        </button>
+        <button
+          onClick={submit}
+          disabled={loading}
+          style={{
+            ...styles.button,
+            flex: 1,
+            background: "#111827",
+            color: "#fff",
+          }}
+        >
+          {loading ? "Saving..." : "Create Admin"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Modal({ children }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(15,23,42,.55)",
+        backdropFilter: "blur(5px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div style={{ ...styles.card, width: "min(520px,100%)", padding: 28 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DashboardHome({
+  dashboards,
+  selected,
+  onSelect,
+  onCreate,
+  onAdmin,
+  onLogout,
+  user,
+  hasAdmin,
+}) {
+  return (
+    <div style={styles.page}>
+      <div
+        className="svara-container"
+        style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 15,
+            padding: "12px 0 25px",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 900, letterSpacing: 1.5 }}>SVARA</div>
+            <div style={{ color: "#94a3b8", fontSize: 10, letterSpacing: 1 }}>
+              TOKEN MANAGEMENT V5
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ color: "#64748b", fontSize: 12 }}>
+              {user?.email || user?.phone || "User"}
+            </span>
+            <button
+              onClick={onLogout}
+              style={{
+                ...styles.button,
+                background: "#f3f4f6",
+                color: "#374151",
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
+        <div style={{ marginBottom: 25 }}>
+          <div
+            style={{
+              color: "#7c3aed",
+              fontWeight: 900,
+              fontSize: 12,
+              letterSpacing: 1.5,
+            }}
+          >
+            WELCOME TO SVARA
+          </div>
+          <h1 style={{ margin: "5px 0", fontSize: 34 }}>Your Dashboards</h1>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
+            Each dashboard has its own association details, categories, prices
+            and registrations.
+          </p>
+        </div>
+
+        <div
+          className="svara-grid-2"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+            gap: 16,
+          }}
+        >
+          {dashboards.map((dashboard, index) => (
+            <button
+              key={dashboard.id}
+              onClick={() => onSelect(dashboard)}
+              style={{
+                ...styles.card,
+                padding: 24,
+                textAlign: "left",
+                cursor: "pointer",
+                border:
+                  selected?.id === dashboard.id
+                    ? "2px solid #7c3aed"
+                    : "1px solid #e5e7eb",
+                background: "#fff",
+              }}
+            >
+              <div
+                style={{
+                  color: "#7c3aed",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: 1,
+                }}
+              >
+                DASHBOARD {index + 1}
+              </div>
+              <h2 style={{ margin: "8px 0", fontSize: 21 }}>
+                {dashboard.association_name}
+              </h2>
+              <div style={{ color: "#64748b", fontSize: 12 }}>
+                {dashboard.contact_email ||
+                  dashboard.contact_phone ||
+                  "No contact details"}
+              </div>
+              <div style={{ marginTop: 18, color: "#111827", fontWeight: 800 }}>
+                Open Dashboard →
+              </div>
+            </button>
+          ))}
+
+          {dashboards.length < 2 && (
+            <button
+              onClick={onCreate}
+              style={{
+                ...styles.card,
+                padding: 24,
+                textAlign: "left",
+                border: "1px dashed #c4b5fd",
+                background: "#faf5ff",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontSize: 30 }}>＋</div>
+              <h2 style={{ margin: "8px 0", fontSize: 20 }}>
+                Create Dashboard
+              </h2>
+              <div style={{ color: "#64748b", fontSize: 12 }}>
+                {2 - dashboards.length} dashboard slot remaining.
+              </div>
+            </button>
+          )}
+        </div>
 
         <div
           style={{
-            fontSize: 12,
-            fontWeight: 800,
-            color: "#6b7280",
-            letterSpacing: 1.5,
+            ...styles.card,
+            marginTop: 18,
+            padding: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 15,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 800 }}>Administration</div>
+            <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+              {hasAdmin
+                ? "Admin credentials are configured."
+                : "Create one admin account for all your dashboards."}
+            </div>
+          </div>
+          <button
+            onClick={onAdmin}
+            style={{ ...styles.button, background: "#111827", color: "#fff" }}
+          >
+            🔐 Admin Received
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
+  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
+  const [quantity, setQuantity] = useState(1);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [payment, setPayment] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const category = categories.find((item) => item.id === categoryId);
+  const amount = Number(category?.price || 0) * Number(quantity || 0);
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (
+      !categoryId ||
+      !name.trim() ||
+      !Number.isInteger(Number(quantity)) ||
+      Number(quantity) < 1
+    ) {
+      setError(
+        "Select a category, enter the customer name and a valid quantity.",
+      );
+      return;
+    }
+
+    if (!payment) {
+      setError("Select a payment mode.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await createRegistration(dashboard.id, {
+        categoryId,
+        quantity: Number(quantity),
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        payment,
+      });
+
+      onSaved(result.entry);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={styles.page}>
+      <div
+        className="svara-container"
+        style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
+      >
+        <button
+          onClick={onBack}
+          style={{
+            ...styles.button,
+            background: "transparent",
+            color: "#64748b",
+            paddingLeft: 0,
+          }}
+        >
+          ← {dashboard.association_name}
+        </button>
+
+        <div style={{ ...styles.card, padding: 26, marginTop: 10 }}>
+          <div
+            style={{
+              color: "#7c3aed",
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 1.3,
+            }}
+          >
+            NEW REGISTRATION
+          </div>
+          <h1 style={{ margin: "6px 0 3px", fontSize: 27 }}>Create Token</h1>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            Token numbers are allocated by PostgreSQL and cancelled numbers are
+            automatically reusable.
+          </p>
+
+          <form onSubmit={submit} style={{ marginTop: 25 }}>
+            <div
+              className="svara-grid-2"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 20,
+              }}
+            >
+              <div>
+                <Field label="Token Category *">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+                      gap: 8,
+                    }}
+                  >
+                    {categories.map((item, index) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        onClick={() => setCategoryId(item.id)}
+                        style={{
+                          ...styles.button,
+                          padding: 14,
+                          textAlign: "left",
+                          background:
+                            categoryId === item.id ? "#f5f3ff" : "#f8fafc",
+                          color: categoryId === item.id ? "#6d28d9" : "#334155",
+                          border:
+                            categoryId === item.id
+                              ? "2px solid #a78bfa"
+                              : "1px solid #e5e7eb",
+                        }}
+                      >
+                        <div style={{ fontSize: 20 }}>
+                          {DEFAULT_ICONS[index % DEFAULT_ICONS.length]}
+                        </div>
+                        <div style={{ marginTop: 5, fontWeight: 800 }}>
+                          {item.name}
+                        </div>
+                        <div style={{ fontSize: 11, marginTop: 3 }}>
+                          ₹{Number(item.price).toFixed(2)} · {item.prefix}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Number of Tokens *">
+                  <div style={{ display: "flex" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantity((q) => Math.max(1, Number(q) - 1))
+                      }
+                      style={{
+                        ...styles.button,
+                        borderRadius: "10px 0 0 10px",
+                        background: "#f8fafc",
+                        border: "1px solid #d1d5db",
+                      }}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max="9999"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      style={{
+                        ...styles.input,
+                        borderRadius: 0,
+                        textAlign: "center",
+                        fontWeight: 800,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantity((q) => Math.min(9999, Number(q || 1) + 1))
+                      }
+                      style={{
+                        ...styles.button,
+                        borderRadius: "0 10px 10px 0",
+                        background: "#f8fafc",
+                        border: "1px solid #d1d5db",
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </Field>
+
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    borderRadius: 14,
+                    padding: 16,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                    }}
+                  >
+                    <span style={{ color: "#64748b", fontSize: 13 }}>
+                      TOTAL AMOUNT
+                    </span>
+                    <strong style={{ fontSize: 23 }}>
+                      ₹{amount.toFixed(2)}
+                    </strong>
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>
+                    ₹{Number(category?.price || 0).toFixed(2)} ×{" "}
+                    {Number(quantity) || 0}
+                  </div>
+                </div>
+
+                <Field label="Payment Mode *">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 8,
+                    }}
+                  >
+                    {["Cash", "Online"].map((mode) => (
+                      <button
+                        type="button"
+                        key={mode}
+                        onClick={() => setPayment(mode)}
+                        style={{
+                          ...styles.button,
+                          background: payment === mode ? "#ecfdf5" : "#f8fafc",
+                          color: payment === mode ? "#047857" : "#475569",
+                          border:
+                            payment === mode
+                              ? "1px solid #6ee7b7"
+                              : "1px solid #e5e7eb",
+                        }}
+                      >
+                        {mode === "Cash" ? "💵" : "📱"} {mode}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              </div>
+
+              <div>
+                <Field label="Customer Name *">
+                  <input
+                    autoFocus
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    style={styles.input}
+                    placeholder="Full name"
+                  />
+                </Field>
+                <Field label="Phone">
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    style={styles.input}
+                    placeholder="+91..."
+                  />
+                </Field>
+                <Field label="Email">
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={styles.input}
+                    placeholder="customer@example.com"
+                  />
+                </Field>
+
+                <div
+                  style={{
+                    ...styles.card,
+                    background: "#faf5ff",
+                    border: "1px solid #e9d5ff",
+                    padding: 20,
+                    marginTop: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#7c3aed",
+                      fontWeight: 900,
+                      letterSpacing: 1,
+                    }}
+                  >
+                    TOKEN PREVIEW
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 900, marginTop: 12 }}>
+                    {category?.prefix || "TOK"}####
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 5 }}>
+                    PostgreSQL assigns the actual next available number when you
+                    save.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {error && <ErrorText>{error}</ErrorText>}
+
+            <div
+              className="svara-actions"
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+                marginTop: 24,
+              }}
+            >
+              <button
+                type="button"
+                onClick={onBack}
+                style={{
+                  ...styles.button,
+                  background: "#f3f4f6",
+                  color: "#374151",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={loading}
+                style={{
+                  ...styles.button,
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                {loading ? "Creating..." : "Create Registration"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuccessModal({ entry, associationName, onClose }) {
+  return (
+    <Modal>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 42, color: "#059669" }}>✓</div>
+        <div
+          style={{
+            color: "#64748b",
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: 1.2,
           }}
         >
           REGISTRATION COMPLETE
         </div>
-
-
         <div
           style={{
-            marginTop: 10,
-            fontSize: 12,
-            color: "#6b7280",
-          }}
-        >
-          {config.icon} {entry.tokenType}
-        </div>
-
-
-        <div
-          style={{
-            margin: "8px 0 5px",
-            fontSize: 42,
-            fontWeight: 900,
-            letterSpacing: 2,
+            fontSize: 40,
             fontFamily: "monospace",
-            color: config.accent,
+            fontWeight: 900,
+            margin: "8px 0",
           }}
         >
-          {tokenIds.length === 1
-            ? tokenIds[0]
-            : `${tokenIds[0]} – ${
-                tokenIds[tokenIds.length - 1]
-              }`}
+          {tokenRange(entry)}
         </div>
-
-
-        <div
-          style={{
-            color: "#6b7280",
-            fontSize: 14,
-            marginBottom: 25,
-          }}
-        >
-          {entry.quantity} token
-          {entry.quantity > 1 ? "s" : ""} generated
+        <div style={{ color: "#64748b", fontSize: 13 }}>
+          Order {entry.orderId} · {entry.quantity} token
+          {Number(entry.quantity) > 1 ? "s" : ""}
         </div>
-
 
         <div
           style={{
             background: "#f8fafc",
-            borderRadius: 14,
-            padding: "15px 18px",
+            borderRadius: 13,
+            padding: 15,
             textAlign: "left",
-            marginBottom: 22,
+            margin: "20px 0",
           }}
         >
-
-          <div style={successRow}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: 5,
+            }}
+          >
             <span>Name</span>
             <strong>{entry.name}</strong>
           </div>
-
-          <div style={successRow}>
-            <span>Phone</span>
-            <strong>{entry.phone}</strong>
-          </div>
-
-          <div style={successRow}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: 5,
+            }}
+          >
             <span>Payment</span>
             <strong>{entry.payment}</strong>
           </div>
-
-          <div style={successRow}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: 5,
+            }}
+          >
             <span>Amount</span>
-            <strong>₹{Number(entry.amount || 0).toFixed(2)}</strong>
+            <strong>₹{Number(entry.amount).toFixed(2)}</strong>
           </div>
-
-
-          <div style={successRow}>
-            <span>Date</span>
-            <strong>{entry.date}</strong>
-          </div>
-
-          <div style={successRow}>
-            <span>Time</span>
-            <strong>{entry.time}</strong>
-          </div>
-
         </div>
 
-
-        <div
-          className="svara-modal-actions"
-          style={{
-            display: "flex",
-            gap: 10,
-          }}
-        >
-
+        <div className="svara-actions" style={{ display: "flex", gap: 10 }}>
           <button
-            onClick={() => printLabels(entry)}
+            onClick={() => printLabels(entry, associationName)}
             style={{
-              ...S.button,
+              ...styles.button,
               flex: 1,
-              padding: "13px 16px",
               background: "#111827",
               color: "#fff",
             }}
           >
             🖨️ Print Labels
           </button>
-
-
           <button
             onClick={onClose}
             style={{
-              ...S.button,
-              padding: "13px 20px",
+              ...styles.button,
               background: "#f3f4f6",
               color: "#374151",
             }}
           >
             Done
           </button>
-
         </div>
-
       </div>
-
-    </div>
+    </Modal>
   );
 }
 
-
-const successRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 15,
-  padding: "7px 0",
-  fontSize: 13,
-  color: "#6b7280",
-};
-
-
-/* =========================================================
-   REGISTRATION FORM
-========================================================= */
-
-function FormScreen({
-  type,
+function UserDashboard({
+  dashboard,
+  categories,
   entries,
-  onSubmit,
   onBack,
-  adminMode = false,
-}) {
-  const [selectedType, setSelectedType] = useState(type);
-  const config = getTokenConfig(selectedType);
-
-  const [quantity, setQuantity] = useState(1);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-
-  const [errors, setErrors] = useState({});
-  const [showPayment, setShowPayment] = useState(false);
-
-  const nameRef = useRef(null);
-
-
-  useEffect(() => {
-    nameRef.current?.focus();
-  }, []);
-
-
- const safeQuantity =
-  Number(quantity) || 1;
-
-const nextSerial = nextTokenSerial(
-  entries,
-  selectedType,
-  safeQuantity
-);
-
-const previewStart = makeTokenId(
-  selectedType,
-  nextSerial
-);
-
-const previewEnd = makeTokenId(
-  selectedType,
-  nextSerial + safeQuantity - 1
-);
-
-
-  function validate() {
-    const validationErrors = {};
-    
-    if (
-    !quantity ||
-    Number(quantity) < 1 ||
-    !Number.isInteger(Number(quantity))
-  ) {
-    validationErrors.quantity =
-      "Enter at least 1 token.";
-  }
-
-    if (!name.trim()) {
-      validationErrors.name =
-        "Name is required.";
-    }
-
-    if (
-      email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email
-      )
-    ) {
-      validationErrors.email =
-        "Enter a valid email address.";
-    }
-
-    if (
-      phone.trim() &&
-      !/^\+?[\d\s\-()]{7,15}$/.test(
-        phone
-      )
-    ) {
-      validationErrors.phone =
-        "Enter a valid phone number.";
-    }
-
-    setErrors(validationErrors);
-
-    return (
-      Object.keys(validationErrors).length ===
-      0
-    );
-  }
-
-
-  function handleContinue() {
-    if (validate()) {
-      setShowPayment(true);
-    }
-  }
-
-
-function handlePayment(mode) {
-
-  /*
-   * IMPORTANT:
-   *
-   * Do NOT generate:
-   * - Order ID
-   * - Token Start
-   * - Token End
-   * - Date
-   * - Time
-   *
-   * here.
-   *
-   * The server will generate all of
-   * those values from the central Excel.
-   */
-
-  const entry = {
-
-    tokenType:
-      selectedType,
-
-    quantity:
-      Number(quantity),
-
-    name:
-      name.trim(),
-
-    email:
-      email.trim(),
-
-    phone:
-      phone.trim(),
-
-    payment:
-      mode,
-  };
-
-
-  setShowPayment(false);
-
-
-  onSubmit(entry);
-}
-
-
-  return (
-    <div style={S.page}>
-
-      {showPayment && (
-        <PaymentModal
-          onSelect={handlePayment}
-          onCancel={() =>
-            setShowPayment(false)
-          }
-        />
-      )}
-
-
-      <div
-  className="svara-container"
-  style={S.container}
->
-
-        {/* TOP BAR */}
-
-        <div className="svara-topbar" style={S.topBar}>
-
-          <button
-            onClick={onBack}
-            style={{
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              color: "#64748b",
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
-            ← Dashboard
-          </button>
-
-
-          <div style={S.logo}>
-
-            <div style={S.logoMark}>
-              S
-            </div>
-
-            <div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 17,
-                  letterSpacing: 1,
-                }}
-              >
-                SVARA
-              </div>
-
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#94a3b8",
-                  letterSpacing: 1,
-                }}
-              >
-                TOKEN SYSTEM
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-
-        {/* FORM HEADER */}
-
-        <div
-          className="svara-card"
-          style={{
-            ...S.card,
-            padding: 24,
-            marginBottom: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
-
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              borderRadius: 17,
-              background: config.light,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 30,
-            }}
-          >
-            {config.icon}
-          </div>
-
-
-          <div style={{ flex: 1 }}>
-
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: config.accent,
-                letterSpacing: 1.2,
-              }}
-            >
-              NEW REGISTRATION
-            </div>
-
-            <h1
-              style={{
-                margin: "4px 0",
-                fontSize: 24,
-                fontWeight: 900,
-              }}
-            >
-              {config.label}
-            </h1>
-
-            <div
-              style={{
-                fontSize: 13,
-                color: "#64748b",
-              }}
-            >
-              Next token:{" "}
-              <strong
-                style={{
-                  color: config.accent,
-                  fontFamily: "monospace",
-                }}
-              >
-                {previewStart}
-              </strong>
-            </div>
-
-          </div>
-
-        </div>
-
-
-        {/* MAIN FORM */}
-
-        <div
-          className="svara-form-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "minmax(0, 1fr) 300px",
-            gap: 18,
-            paddingBottom: 40,
-          }}
-        >
-
-          {/* CUSTOMER DETAILS */}
-
-          <div
-            className="svara-card"
-            style={{
-              ...S.card,
-              padding: 28,
-            }}
-          >
-
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                marginBottom: 4,
-              }}
-            >
-              Customer Details
-            </div>
-
-            <div
-              style={{
-                fontSize: 13,
-                color: "#64748b",
-                marginBottom: 25,
-              }}
-            >
-              Enter the customer's information
-            </div>
-
-
-            {/* NAME */}
-
-            <div style={{ marginBottom: 18 }}>
-
-              <label style={S.label}>
-                Full Name{" "}
-                <span style={{ color: "#ef4444" }}>
-                  *
-                </span>
-              </label>
-
-              <input
-                ref={nameRef}
-                value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleContinue();
-                  }
-                }}
-                placeholder="Enter full name"
-                style={{
-                  ...S.input,
-                  borderColor: errors.name
-                    ? "#ef4444"
-                    : "#d1d5db",
-                }}
-              />
-
-              {errors.name && (
-                <div style={S.error}>
-                  {errors.name}
-                </div>
-              )}
-
-            </div>
-
-
-            {/* PHONE */}
-
-            <div style={{ marginBottom: 18 }}>
-
-              <label style={S.label}>
-                Phone Number{" "}
-                <span style={{ color: "#94a3b8" }}>
-                  (optional)
-                </span>
-              </label>
-
-              <input
-                value={phone}
-                onChange={(e) =>
-                  setPhone(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleContinue();
-                  }
-                }}
-                placeholder="+91 9876543210"
-                style={{
-                  ...S.input,
-                  borderColor: errors.phone
-                    ? "#ef4444"
-                    : "#d1d5db",
-                }}
-              />
-
-              {errors.phone && (
-                <div style={S.error}>
-                  {errors.phone}
-                </div>
-              )}
-
-            </div>
-
-
-            {/* EMAIL */}
-
-            <div style={{ marginBottom: 18 }}>
-
-              <label style={S.label}>
-                Email{" "}
-                <span
-                  style={{
-                    color: "#9ca3af",
-                    fontWeight: 500,
-                  }}
-                >
-                  (optional)
-                </span>
-              </label>
-
-              <input
-                value={email}
-                onChange={(e) =>
-                  setEmail(e.target.value)
-                }
-                placeholder="customer@email.com"
-                style={{
-                  ...S.input,
-                  borderColor: errors.email
-                    ? "#ef4444"
-                    : "#d1d5db",
-                }}
-              />
-
-              {errors.email && (
-                <div style={S.error}>
-                  {errors.email}
-                </div>
-              )}
-
-            </div>
-            
-            {adminMode && (
-              <div style={{ marginBottom: 20 }}>
-                <label style={S.label}>
-                  Token Category
-                </label>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(3, minmax(0, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  {Object.keys(TOKEN_TYPES).map((tokenType) => {
-                    const item = TOKEN_TYPES[tokenType];
-                    const active =
-                      selectedType === tokenType;
-
-                    return (
-                      <button
-                        key={tokenType}
-                        type="button"
-                        onClick={() =>
-                          setSelectedType(tokenType)
-                        }
-                        style={{
-                          ...S.button,
-                          padding: "14px 10px",
-                          background: active
-                            ? item.light
-                            : "#fff",
-                          color: active
-                            ? item.accent
-                            : "#475569",
-                          border: active
-                            ? `2px solid ${item.accent}`
-                            : "1px solid #d1d5db",
-                        }}
-                      >
-                        <div style={{ fontSize: 22 }}>
-                          {item.icon}
-                        </div>
-                        <div style={{ marginTop: 5 }}>
-                          {item.label}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 3,
-                            fontSize: 11,
-                            fontWeight: 800,
-                          }}
-                        >
-                          ₹{item.price}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* CALCULATED AMOUNT */}
-
-            <div
-              style={{
-                marginBottom: 18,
-                padding: "14px 16px",
-                borderRadius: 12,
-                background: "#f8fafc",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <span style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
-                  TOTAL AMOUNT
-                </span>
-                <strong style={{ fontSize: 22, color: config.accent }}>
-                  ₹{((Number(config.price) || 0) * safeQuantity).toFixed(2)}
-                </strong>
-              </div>
-              <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>
-                ₹{Number(config.price) || 0} × {safeQuantity} token{safeQuantity > 1 ? "s" : ""}
-              </div>
-            </div>
-
-            {/* QUANTITY */}
-
-            <div style={{ marginBottom: 25 }}>
-
-              <label style={S.label}>
-                Number of Tokens
-              </label>
-
-              <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-  }}
->
-  <button
-    type="button"
-    onClick={() =>
-      setQuantity(
-        Math.max(
-          1,
-          Number(quantity) - 1
-        )
-      )
-    }
-    style={{
-      width: 46,
-      height: 44,
-      border:
-        "1px solid #d1d5db",
-      borderRadius:
-        "10px 0 0 10px",
-      background: "#f8fafc",
-      cursor: "pointer",
-      fontSize: 20,
-    }}
-  >
-    −
-  </button>
-
-  <input
-    type="number"
-    min="1"
-    max="9999"
-    inputMode="numeric"
-    value={quantity}
-    onChange={(e) => {
-      const value =
-        e.target.value;
-
-      if (value === "") {
-        setQuantity("");
-        return;
-      }
-
-      const number =
-        Number(value);
-
-      if (
-        Number.isInteger(number) &&
-        number >= 1
-      ) {
-        setQuantity(
-          Math.min(9999, number)
-        );
-      }
-    }}
-    style={{
-      width: 120,
-      height: 44,
-      boxSizing: "border-box",
-      border:
-        "1px solid #d1d5db",
-      borderLeft: "none",
-      borderRight: "none",
-      textAlign: "center",
-      fontWeight: 800,
-      fontSize: 16,
-      outline: "none",
-    }}
-  />
-
-  <button
-    type="button"
-    onClick={() =>
-      setQuantity(
-        Math.min(
-          9999,
-          Number(quantity || 1) + 1
-        )
-      )
-    }
-    style={{
-      width: 46,
-      height: 44,
-      border:
-        "1px solid #d1d5db",
-      borderRadius:
-        "0 10px 10px 0",
-      background: "#f8fafc",
-      cursor: "pointer",
-      fontSize: 20,
-    }}
-  >
-    +
-  </button>
-</div>
-
-{errors.quantity && (
-  <div style={S.error}>
-    {errors.quantity}
-  </div>
-)}
-
-            </div>
-
-
-            <button
-              onClick={handleContinue}
-              style={{
-                ...S.button,
-                width: "100%",
-                padding: "14px",
-                background: config.accent,
-                color: "#fff",
-                fontSize: 15,
-                boxShadow:
-                  "0 8px 20px rgba(0,0,0,.12)",
-              }}
-            >
-              Continue to Payment →
-            </button>
-
-          </div>
-
-
-          {/* TOKEN PREVIEW */}
-
-          <div
-            className="svara-card"
-            style={{
-              ...S.card,
-              padding: 22,
-              height: "fit-content",
-            }}
-          >
-
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 800,
-                letterSpacing: 1,
-                color: "#94a3b8",
-                marginBottom: 15,
-              }}
-            >
-              TOKEN PREVIEW
-            </div>
-
-
-            <div
-              style={{
-                background: config.light,
-                borderRadius: 18,
-                padding: 22,
-                textAlign: "center",
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: 30,
-                  marginBottom: 8,
-                }}
-              >
-                {config.icon}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: config.accent,
-                  letterSpacing: 1,
-                }}
-              >
-                {config.label.toUpperCase()}
-              </div>
-
-              <div
-                style={{
-                  fontFamily: "monospace",
-                  fontWeight: 900,
-                  fontSize: 29,
-                  margin: "10px 0",
-                  color: "#111827",
-                  letterSpacing: 1,
-                }}
-              >
-                {quantity === 1
-                  ? previewStart
-                  : `${previewStart} – ${previewEnd}`}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#64748b",
-                }}
-              >
-                {quantity} token
-                {quantity > 1 ? "s" : ""}
-              </div>
-
-            </div>
-
-
-            <div
-              style={{
-                marginTop: 18,
-                paddingTop: 18,
-                borderTop:
-                  "1px solid #e5e7eb",
-              }}
-            >
-
-              <div style={previewRow}>
-                <span>Category</span>
-                <strong>{config.label}</strong>
-              </div>
-
-              <div style={previewRow}>
-                <span>Quantity</span>
-                <strong>{quantity}</strong>
-              </div>
-
-              <div style={previewRow}>
-                <span>First Token</span>
-                <strong>{previewStart}</strong>
-              </div>
-
-              <div style={previewRow}>
-                <span>Last Token</span>
-                <strong>{previewEnd}</strong>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-    </div>
-  );
-}
-
-
-const previewRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  fontSize: 12,
-  padding: "7px 0",
-  color: "#64748b",
-};
-
-
-/* =========================================================
-   DASHBOARD
-========================================================= */
-
-function Dashboard({
-  entries,
-  onSelect,
-  onClear,
-  onCancel,
-  onStatusChange,
-  onReprint,
-  onAdmin,
-}) {
-  const counts = {
-    Bullet: 0,
-    Saree: 0,
-    Silver: 0,
-  };
-
- entries.forEach((entry) => {
-  if (
-    String(entry.status || "Active").toLowerCase() ===
-    "cancelled"
-  ) {
-    return;
-  }
-
-  if (counts[entry.tokenType] !== undefined) {
-    counts[entry.tokenType] +=
-      Number(entry.quantity) || 0;
-  }
-});
-
-  const totalTokens =
-    counts.Bullet +
-    counts.Saree +
-    counts.Silver;
-
-
-  return (
-    <div style={S.page}>
-
-      <div
-  className="svara-container"
-  style={S.container}
->
-
-        {/* HEADER */}
-
-        <div
-  className="svara-topbar"
-  style={S.topBar}
->
-
-          <div style={S.logo}>
-
-            <div style={S.logoMark}>
-              S
-            </div>
-
-            <div>
-
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 18,
-                  letterSpacing: 1,
-                }}
-              >
-                SVARA
-              </div>
-
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#94a3b8",
-                  letterSpacing: 1.2,
-                }}
-              >
-                TOKEN MANAGEMENT
-              </div>
-
-            </div>
-
-          </div>
-
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              background: "#ecfdf5",
-              color: "#047857",
-              padding: "7px 11px",
-              borderRadius: 30,
-              fontSize: 11,
-              fontWeight: 700,
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: "#10b981",
-              }}
-            />
-            SYSTEM ONLINE
-          </div>
-
-        </div>
-
-
-        {/* HERO */}
-
-        <div
-          style={{
-            marginBottom: 25,
-          }}
-        >
-
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: "#7c3aed",
-              letterSpacing: 1.5,
-              marginBottom: 7,
-            }}
-          >
-            WELCOME TO SVARA
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 34,
-              fontWeight: 900,
-              letterSpacing: -1,
-            }}
-          >
-            Token Management
-          </h1>
-
-          <p
-            style={{
-              color: "#64748b",
-              fontSize: 14,
-              marginTop: 8,
-            }}
-          >
-            Select a category to create a new token
-            registration.
-          </p>
-
-        </div>
-
-
-        {/* CATEGORY CARDS */}
-
-        <div
-          className="svara-category-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(3, minmax(0, 1fr))",
-            gap: 16,
-            marginBottom: 18,
-          }}
-        >
-
-          {Object.entries(TOKEN_TYPES).map(
-            ([type, config]) => (
-              <button
-                key={type}
-                onClick={() => onSelect(type)}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  background: "#fff",
-                  borderRadius: 20,
-                  padding: 22,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  boxShadow:
-                    "0 7px 24px rgba(15,23,42,.05)",
-                  transition:
-                    "transform .15s ease, box-shadow .15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform =
-                    "translateY(-3px)";
-                  e.currentTarget.style.boxShadow =
-                    "0 14px 30px rgba(15,23,42,.10)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform =
-                    "translateY(0)";
-                  e.currentTarget.style.boxShadow =
-                    "0 7px 24px rgba(15,23,42,.05)";
-                }}
-              >
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent:
-                      "space-between",
-                    alignItems: "center",
-                  }}
-                >
-
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 15,
-                      background: config.light,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 25,
-                    }}
-                  >
-                    {config.icon}
-                  </div>
-
-                  <span
-                    style={{
-                      color: "#94a3b8",
-                      fontSize: 18,
-                    }}
-                  >
-                    →
-                  </span>
-
-                </div>
-
-
-                <div
-                  style={{
-                    marginTop: 18,
-                    fontSize: 17,
-                    fontWeight: 800,
-                  }}
-                >
-                  {type}
-                </div>
-
-
-                <div
-                  style={{
-                    marginTop: 5,
-                    fontSize: 12,
-                    color: "#64748b",
-                  }}
-                >
-                  Next token
-                </div>
-
-
-                <div
-                  style={{
-                    marginTop: 3,
-                    fontFamily: "monospace",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    color: config.accent,
-                  }}
-                >
-                  {makeTokenId(
-                    type,
-                    nextTokenSerial(
-                      entries,
-                      type
-                    )
-                  )}
-                </div>
-
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    fontSize: 11,
-                    color: "#94a3b8",
-                  }}
-                >
-                  {counts[type]} token
-                  {counts[type] !== 1
-                    ? "s"
-                    : ""}{" "}
-                  registered
-                </div>
-
-              </button>
-            )
-          )}
-
-        </div>
-
-
-        {/* STATS */}
-
-        <div
-          className="svara-card"
-          style={{
-            ...S.card,
-            padding: 22,
-            marginBottom: 18,
-          }}
-        >
-
-          <div
-            className="svara-stats-grid"
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(4, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-
-            <StatCard
-              label="TOTAL TOKENS"
-              value={totalTokens}
-              icon="🎟️"
-            />
-
-            <StatCard
-              label="BULLET"
-              value={counts.Bullet}
-              icon="🏍️"
-            />
-
-            <StatCard
-              label="SAREE"
-              value={counts.Saree}
-              icon="🥻"
-            />
-
-            <StatCard
-              label="SILVER"
-              value={counts.Silver}
-              icon="🥈"
-            />
-
-          </div>
-
-        </div>
-
-
-        {/* RECENT REGISTRATIONS */}
-
-        <div
-          className="svara-card"
-          style={{
-            ...S.card,
-            marginBottom: 30,
-            overflow: "hidden",
-          }}
-        >
-
-          <div
-            className="svara-dashboard-header"
-            style={{
-              padding:
-                "19px 22px",
-              display: "flex",
-              justifyContent:
-                "space-between",
-              alignItems: "center",
-              borderBottom:
-                "1px solid #eef2f7",
-            }}
-          >
-
-            <div>
-
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 800,
-                }}
-              >
-                Recent Registrations
-              </div>
-
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#94a3b8",
-                  marginTop: 3,
-                }}
-              >
-                Latest token activity
-              </div>
-
-            </div>
-
-
-            <div
-              className="svara-dashboard-actions"
-              style={{
-                display: "flex",
-                gap: 8,
-              }}
-            >
-
-              <button
-  onClick={onAdmin}
-  style={{
-    ...S.button,
-    padding: "9px 13px",
-    background: "#111827",
-    color: "#fff",
-  }}
->
-  🔐 Admin Received
-</button>
-
-
-              <button
-                onClick={onClear}
-                disabled={!entries.length}
-                style={{
-                  ...S.button,
-                  padding:
-                    "9px 13px",
-                  background: "#fef2f2",
-                  color: "#b91c1c",
-                  opacity:
-                    entries.length
-                      ? 1
-                      : 0.5,
-                }}
-              >
-                Clear
-              </button>
-
-            </div>
-
-          </div>
-
-
-          {!entries.length ? (
-            <div
-              style={{
-                padding: 55,
-                textAlign: "center",
-                color: "#94a3b8",
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: 35,
-                  marginBottom: 10,
-                }}
-              >
-                🎟️
-              </div>
-
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: "#64748b",
-                }}
-              >
-                No registrations yet
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  marginTop: 5,
-                }}
-              >
-                Select a token category above
-                to get started.
-              </div>
-
-            </div>
-          ) : (
-            <div
-              className="svara-dashboard-table"
-              style={{
-                overflowX: "auto",
-              }}
-            >
-
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse:
-                    "collapse",
-                  fontSize: 13,
-                }}
-              >
-
-                <thead>
-
-                  <tr
-                    style={{
-                      background:
-                        "#f8fafc",
-                      color:
-                        "#64748b",
-                      fontSize: 10,
-                      letterSpacing:
-                        ".8px",
-                    }}
-                  >
-
-                    <th style={tableHeader}>TOKEN</th>
-<th style={tableHeader}>CATEGORY</th>
-<th style={tableHeader}>CUSTOMER</th>
-<th style={tableHeader}>PHONE</th>
-<th style={tableHeader}>QTY</th>
-<th style={tableHeader}>AMOUNT</th>
-<th style={tableHeader}>PAYMENT</th>
-<th style={tableHeader}>STATUS</th>
-<th style={tableHeader}>DATE</th>
-<th style={tableHeader}>ACTION</th>
-
-                  </tr>
-
-                </thead>
-
-
-                <tbody>
-
-                  {[...entries]
-                    .reverse()
-                    .slice(0, 8)
-                    .map((entry, index) => {
-
-                      const config =
-                        getTokenConfig(
-                          entry.tokenType
-                        );
-
-                      return (
-                        <tr
-                          key={
-                            entry.orderId ||
-                            index
-                          }
-                          style={{
-                            borderTop:
-                              "1px solid #f1f5f9",
-                          }}
-                        >
-
-                          <td style={tableCell}>
-
-                            <span
-                              style={{
-                                fontFamily:
-                                  "monospace",
-                                fontWeight: 800,
-                                color:
-                                  config.accent,
-                              }}
-                            >
-                              {entry.tokenStart}
-                            </span>
-
-                            {Number(
-                              entry.quantity
-                            ) > 1 && (
-                              <span
-                                style={{
-                                  color:
-                                    "#94a3b8",
-                                  fontSize: 11,
-                                }}
-                              >
-                                {" "}
-                                –
-                                {" "}
-                                {entry.tokenEnd}
-                              </span>
-                            )}
-
-                          </td>
-
-                          <td style={tableCell}>
-
-                            <span
-                              style={{
-                                display:
-                                  "inline-flex",
-                                alignItems:
-                                  "center",
-                                gap: 5,
-                                background:
-                                  config.light,
-                                color:
-                                  config.accent,
-                                padding:
-                                  "5px 8px",
-                                borderRadius:
-                                  8,
-                                fontSize: 11,
-                                fontWeight: 700,
-                              }}
-                            >
-                              {config.icon}{" "}
-                              {entry.tokenType}
-                            </span>
-
-                          </td>
-
-
-                          <td
-                            style={{
-                              ...tableCell,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {entry.name}
-                          </td>
-
-
-                          <td style={tableCell}>
-                            {entry.phone}
-                          </td>
-
-
-                          <td
-                            style={{
-                              ...tableCell,
-                              textAlign:
-                                "center",
-                            }}
-                          >
-                            {entry.quantity}
-                          </td>
-
-
-                          <td style={tableCell}>
-                            ₹{Number(entry.amount || 0).toFixed(2)}
-                          </td>
-
-
-                          <td style={tableCell}>
-                            {entry.payment}
-                          </td>
-
-                          <td style={tableCell}>
-  <span
-    style={{
-      display: "inline-flex",
-      padding: "5px 9px",
-      borderRadius: 8,
-      fontSize: 10,
-      fontWeight: 800,
-      background:
-        entry.status === "Cancelled"
-          ? "#fef2f2"
-          : entry.status === "Payment Not Received"
-          ? "#fff7ed"
-          : "#ecfdf5",
-      color:
-        entry.status === "Cancelled"
-          ? "#b91c1c"
-          : entry.status === "Payment Not Received"
-          ? "#c2410c"
-          : "#047857",
-    }}
-  >
-    {entry.status || "Complete"}
-  </span>
-</td>
-
-
-                          <td style={tableCell}>
-                            {entry.date}
-                          </td>
-
-                          <td style={tableCell}>
-  <div
-    style={{
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap",
-    }}
-  >
-    {String(entry.status || "Complete").toLowerCase() !==
-      "cancelled" && (
-      <select
-        value={
-          entry.status === "Payment Not Received"
-            ? "Payment Not Received"
-            : "Complete"
-        }
-        onChange={(e) =>
-          onStatusChange(
-            entry,
-            e.target.value
-          )
-        }
-        style={{
-          border: "1px solid #d1d5db",
-          borderRadius: 8,
-          padding: "6px 8px",
-          fontSize: 11,
-          background: "#fff",
-        }}
-      >
-        <option value="Complete">
-          Complete
-        </option>
-
-        <option value="Payment Not Received">
-          Payment Not Received
-        </option>
-      </select>
-    )}
-
-    <button
-      onClick={() => onReprint(entry)}
-      style={{
-        ...S.button,
-        padding: "7px 10px",
-        background: "#111827",
-        color: "#fff",
-        fontSize: 11,
-      }}
-    >
-      🖨️ Reprint
-    </button>
-
-    {String(entry.status || "Complete").toLowerCase() ===
-    "cancelled" ? (
-      <span
-        style={{
-          display: "inline-flex",
-          padding: "5px 8px",
-          borderRadius: 8,
-          fontSize: 10,
-          fontWeight: 800,
-          background: "#fef2f2",
-          color: "#b91c1c",
-        }}
-      >
-        CANCELLED
-      </span>
-    ) : (
-      <button
-        onClick={() => onCancel(entry)}
-        style={{
-          ...S.button,
-          padding: "7px 10px",
-          background: "#fef2f2",
-          color: "#b91c1c",
-          fontSize: 11,
-        }}
-      >
-        Cancel
-      </button>
-    )}
-  </div>
-</td>
-
-                        </tr>
-                      );
-                    })}
-
-                </tbody>
-
-              </table>
-
-            </div>
-          )}
-
-        </div>
-
-      </div>
-
-    </div>
-  );
-}
-
-
-/* =========================================================
-   STAT CARD
-========================================================= */
-
-function StatCard({
-  label,
-  value,
-  icon,
-  onClick,
-  active = false,
-}) {
-  return (
-    <div
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (onClick && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      style={{
-        padding: "12px 14px",
-        borderRadius: 15,
-        background: active ? "#eef2ff" : "#f8fafc",
-        border: active
-          ? "1px solid #c4b5fd"
-          : "1px solid transparent",
-        cursor: onClick ? "pointer" : "default",
-      }}
-    >
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          color: "#64748b",
-          fontSize: 10,
-          fontWeight: 800,
-          letterSpacing: .7,
-        }}
-      >
-        <span>{icon}</span>
-        {label}
-      </div>
-
-
-      <div
-        style={{
-          fontSize: 25,
-          fontWeight: 900,
-          marginTop: 8,
-        }}
-      >
-        {value}
-      </div>
-
-    </div>
-  );
-}
-
-function AdminReceived({
-  adminEntries,
-  adminSummary,
-  onBack,
-  onRefresh,
-  onDownload,
-  onClear,
-  onLogout,
   onCreate,
+  onRefresh,
   onStatusChange,
-  onCancelAdmin,
+  onCancel,
   onReprint,
 }) {
   const [filter, setFilter] = useState("all");
 
-  const filteredAdminEntries =
-    (adminEntries || []).filter((entry) => {
-      if (filter === "payment") {
-        return entry.status === "Payment Not Received";
-      }
+  const filtered = useMemo(() => {
+    if (filter === "cancelled")
+      return entries.filter((e) => e.status === "Cancelled");
+    if (filter === "payment")
+      return entries.filter((e) => e.status === "Payment Not Received");
+    return entries;
+  }, [entries, filter]);
 
-      if (filter === "cancelled") {
-        return entry.status === "Cancelled";
-      }
-
-      return true;
-    });
+  const activeTokens = entries
+    .filter((e) => e.status !== "Cancelled")
+    .reduce((sum, e) => sum + Number(e.quantity || 0), 0);
 
   return (
-    <div style={S.page}>
+    <div style={styles.page}>
       <div
         className="svara-container"
-        style={S.container}
+        style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
-
         <div
-          className="svara-topbar"
-          style={S.topBar}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+            paddingBottom: 22,
+          }}
         >
           <button
             onClick={onBack}
             style={{
-              border: "none",
+              ...styles.button,
               background: "transparent",
-              cursor: "pointer",
               color: "#64748b",
-              fontSize: 14,
-              fontWeight: 600,
+              paddingLeft: 0,
             }}
           >
-            ← Dashboard
+            ← Dashboards
           </button>
-
-          <div style={S.logo}>
-            <div style={S.logoMark}>
-              S
-            </div>
-
-            <div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 17,
-                  letterSpacing: 1,
-                }}
-              >
-                SVARA
-              </div>
-
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#94a3b8",
-                  letterSpacing: 1,
-                }}
-              >
-                ADMIN RECEIVED
-              </div>
-            </div>
+          <div style={{ fontWeight: 900, letterSpacing: 1.2 }}>
+            {dashboard.association_name}
           </div>
         </div>
 
-
-        <div
-          style={{
-            marginBottom: 22,
-          }}
-        >
+        <div style={{ marginBottom: 20 }}>
           <div
             style={{
-              fontSize: 12,
-              fontWeight: 800,
               color: "#7c3aed",
-              letterSpacing: 1.5,
-            }}
-          >
-            ADMIN DASHBOARD
-          </div>
-
-          <h1
-            style={{
-              margin: "5px 0",
-              fontSize: 32,
+              fontSize: 11,
               fontWeight: 900,
+              letterSpacing: 1.4,
             }}
           >
-            Admin Received
+            TOKEN MANAGEMENT
+          </div>
+          <h1 style={{ margin: "5px 0", fontSize: 32 }}>
+            {dashboard.association_name}
           </h1>
-
-          <p
-            style={{
-              color: "#64748b",
-              fontSize: 14,
-              margin: 0,
-            }}
-          >
-            Payment and token administration
+          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            Manage registrations for this dashboard.
           </p>
         </div>
 
-
         <div
-          className="svara-stats-grid"
+          className="svara-grid-4"
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "repeat(4, minmax(0, 1fr))",
-            gap: 12,
-            marginBottom: 20,
+            gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+            gap: 10,
+            marginBottom: 18,
           }}
         >
-          <StatCard
-            label="TOTAL AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.totalAmountReceived || 0
-            ).toFixed(2)}`}
-            icon="💰"
-          />
-
-          <StatCard
-            label="CANCELLED TOKENS"
+          <Stat label="ACTIVE TOKENS" value={activeTokens} />
+          <Stat label="REGISTRATIONS" value={entries.length} />
+          <Stat label="CATEGORIES" value={categories.length} />
+          <Stat
+            label="PAYMENT PENDING"
             value={
-              adminSummary?.cancelledTokens || 0
+              entries.filter((e) => e.status === "Payment Not Received").length
             }
-            icon="❌"
-            onClick={() =>
-              setFilter(
-                filter === "cancelled"
-                  ? "all"
-                  : "cancelled"
-              )
-            }
-            active={filter === "cancelled"}
-          />
-
-          <StatCard
-            label="PAYMENT NOT RECEIVED"
-            value={
-              adminSummary?.paymentNotReceivedTokens ||
-              0
-            }
-            icon="⏳"
-            onClick={() =>
-              setFilter(
-                filter === "payment"
-                  ? "all"
-                  : "payment"
-              )
-            }
-            active={filter === "payment"}
-          />
-
-          <StatCard
-            label="TOTAL ORDERS"
-            value={
-              adminSummary?.totalOrders || 0
-            }
-            icon="📋"
-            onClick={() => setFilter("all")}
-            active={filter === "all"}
           />
         </div>
 
-        <div
-          className="svara-stats-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(3, minmax(0, 1fr))",
-            gap: 12,
-            marginBottom: 20,
-          }}
-        >
-          <StatCard
-            label="BULLET AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Bullet || 0
-            ).toFixed(2)}`}
-            icon="🎯"
-          />
-
-          <StatCard
-            label="SAREE AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Saree || 0
-            ).toFixed(2)}`}
-            icon="🥻"
-          />
-
-          <StatCard
-            label="SILVER AMOUNT RECEIVED"
-            value={`₹${Number(
-              adminSummary?.amountReceivedByCategory?.Silver || 0
-            ).toFixed(2)}`}
-            icon="🥈"
-          />
-        </div>
-
-        {filter !== "all" && (
+        <div style={{ ...styles.card, overflow: "hidden" }}>
           <div
+            className="svara-actions"
             style={{
-              marginBottom: 12,
+              padding: 18,
               display: "flex",
-              alignItems: "center",
               justifyContent: "space-between",
+              alignItems: "center",
               gap: 10,
-              fontSize: 13,
-              color: "#475569",
+              borderBottom: "1px solid #eef2f7",
             }}
           >
-            <strong>
-              Showing only{" "}
-              {filter === "payment"
-                ? "Payment Not Received"
-                : "Cancelled"}{" "}
-              records ({filteredAdminEntries.length})
-            </strong>
-
-            <button
-              onClick={() => setFilter("all")}
-              style={{
-                ...S.button,
-                padding: "7px 10px",
-                background: "#f1f5f9",
-                color: "#334155",
-              }}
-            >
-              Show All
-            </button>
-          </div>
-        )}
-
-        <div
-          className="svara-card"
-          style={{
-            ...S.card,
-            overflow: "hidden",
-          }}
-        >
-
-          <div
-            className="svara-dashboard-header"
-            style={{
-              padding: "18px 22px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              borderBottom:
-                "1px solid #eef2f7",
-            }}
-          >
-
             <div>
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 800,
-                }}
-              >
-                Registration Details
-              </div>
-
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#94a3b8",
-                  marginTop: 3,
-                }}
-              >
-                Admin-only information
+              <div style={{ fontWeight: 900 }}>Registrations</div>
+              <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 3 }}>
+                PostgreSQL-backed data
               </div>
             </div>
-
-
-            <div
-              className="svara-dashboard-actions"
-              style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-              }}
-            >
-
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
               <button
                 onClick={onCreate}
                 style={{
-                  ...S.button,
-                  padding: "9px 13px",
+                  ...styles.button,
                   background: "#7c3aed",
                   color: "#fff",
                 }}
               >
-                ➕ Create Token
+                + Create Token
               </button>
-
               <button
                 onClick={onRefresh}
                 style={{
-                  ...S.button,
-                  padding: "9px 13px",
+                  ...styles.button,
                   background: "#f1f5f9",
                   color: "#334155",
                 }}
               >
-                🔄 Refresh
+                ↻ Refresh
               </button>
-
-              <button
-                onClick={onDownload}
-                style={{
-                  ...S.button,
-                  padding: "9px 13px",
-                  background: "#111827",
-                  color: "#fff",
-                }}
-              >
-                📥 Download Excel
-              </button>
-
-              <button
-                onClick={onClear}
-                style={{
-                  ...S.button,
-                  padding: "9px 13px",
-                  background: "#fef2f2",
-                  color: "#b91c1c",
-                }}
-              >
-                Clear All
-              </button>
-
-              <button
-                onClick={onLogout}
-                style={{
-                  ...S.button,
-                  padding: "9px 13px",
-                  background: "#f3f4f6",
-                  color: "#374151",
-                }}
-              >
-                Logout
-              </button>
-
             </div>
           </div>
 
+          <div style={{ padding: "10px 18px", display: "flex", gap: 7 }}>
+            {[
+              ["all", "All"],
+              ["payment", "Payment Pending"],
+              ["cancelled", "Cancelled"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                style={{
+                  ...styles.button,
+                  padding: "7px 10px",
+                  fontSize: 12,
+                  background: filter === value ? "#111827" : "#f1f5f9",
+                  color: filter === value ? "#fff" : "#475569",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {!adminEntries?.length ? (
-            <div
-              style={{
-                padding: 45,
-                textAlign: "center",
-                color: "#94a3b8",
-              }}
-            >
+          {!filtered.length ? (
+            <div style={{ padding: 45, textAlign: "center", color: "#94a3b8" }}>
               No registrations found.
             </div>
           ) : (
-            <div
-              className="svara-dashboard-table"
-              style={{
-                overflowX: "auto",
-              }}
-            >
+            <div className="svara-table-wrap" style={{ overflowX: "auto" }}>
               <table
+                className="svara-table"
                 style={{
                   width: "100%",
                   borderCollapse: "collapse",
-                  fontSize: 13,
+                  fontSize: 12,
                 }}
               >
                 <thead>
@@ -3546,246 +1793,113 @@ function AdminReceived({
                       background: "#f8fafc",
                       color: "#64748b",
                       fontSize: 10,
-                      letterSpacing: ".8px",
                     }}
                   >
-                    <th style={tableHeader}>TOKEN</th>
-                    <th style={tableHeader}>CATEGORY</th>
-                    <th style={tableHeader}>CUSTOMER</th>
-                    <th style={tableHeader}>PHONE</th>
-                    <th style={tableHeader}>QTY</th>
-                    <th style={tableHeader}>AMOUNT</th>
-                    <th style={tableHeader}>PAYMENT</th>
-                    <th style={tableHeader}>STATUS</th>
-                    <th style={tableHeader}>DATE</th>
-                    <th style={tableHeader}>ADMIN NOTES</th>
-                    <th style={tableHeader}>ACTION</th>
+                    {[
+                      "TOKEN",
+                      "CATEGORY",
+                      "CUSTOMER",
+                      "PHONE",
+                      "QTY",
+                      "AMOUNT",
+                      "PAYMENT",
+                      "STATUS",
+                      "DATE",
+                      "ACTION",
+                    ].map((x) => (
+                      <th
+                        key={x}
+                        style={{ padding: "11px 13px", textAlign: "left" }}
+                      >
+                        {x}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-
                 <tbody>
-                  {filteredAdminEntries.map((entry, index) => {
-                    const config = getTokenConfig(entry.tokenType);
-
-                    const status =
-                      entry.status === "Payment Not Received"
-                        ? "Payment Not Received"
-                        : entry.status === "Cancelled"
-                        ? "Cancelled"
-                        : "Complete";
-
+                  {filtered.map((entry) => {
+                    const category = categories.find(
+                      (c) => c.id === entry.categoryId,
+                    );
                     return (
                       <tr
-                        key={entry.orderId || index}
-                        style={{
-                          borderTop: "1px solid #f1f5f9",
-                        }}
+                        key={entry.id}
+                        style={{ borderTop: "1px solid #f1f5f9" }}
                       >
-                        <td style={tableCell}>
-                          <span
-                            style={{
-                              fontFamily: "monospace",
-                              fontWeight: 800,
-                              color: config.accent,
-                            }}
-                          >
-                            {entry.tokenStart}
-                          </span>
-
-                          {Number(entry.quantity) > 1 && (
-                            <span
-                              style={{
-                                color: "#94a3b8",
-                                fontSize: 11,
-                              }}
-                            >
-                              {" "}–{" "}{entry.tokenEnd}
-                            </span>
-                          )}
+                        <td style={cell}>
+                          <strong style={{ fontFamily: "monospace" }}>
+                            {tokenRange(entry)}
+                          </strong>
                         </td>
-
-                        <td style={tableCell}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 5,
-                              background: config.light,
-                              color: config.accent,
-                              padding: "5px 8px",
-                              borderRadius: 8,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {config.icon} {entry.tokenType}
-                          </span>
+                        <td style={cell}>{entry.categoryName}</td>
+                        <td style={cell}>
+                          <strong>{entry.name}</strong>
                         </td>
-
-                        <td
-                          style={{
-                            ...tableCell,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {entry.name}
+                        <td style={cell}>{entry.phone}</td>
+                        <td style={cell}>{entry.quantity}</td>
+                        <td style={cell}>₹{Number(entry.amount).toFixed(2)}</td>
+                        <td style={cell}>{entry.payment}</td>
+                        <td style={cell}>
+                          <StatusBadge status={entry.status} />
                         </td>
-
-                        <td style={tableCell}>
-                          {entry.phone}
-                        </td>
-
-                        <td
-                          style={{
-                            ...tableCell,
-                            textAlign: "center",
-                          }}
-                        >
-                          {entry.quantity}
-                        </td>
-
-                        <td style={tableCell}>
-                          ₹{Number(entry.amount || 0).toFixed(2)}
-                        </td>
-
-                        <td style={tableCell}>
-                          {entry.payment}
-                        </td>
-
-                        <td style={tableCell}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              padding: "5px 9px",
-                              borderRadius: 8,
-                              fontSize: 10,
-                              fontWeight: 800,
-                              whiteSpace: "nowrap",
-                              background:
-                                status === "Cancelled"
-                                  ? "#fef2f2"
-                                  : status === "Payment Not Received"
-                                  ? "#fff7ed"
-                                  : "#ecfdf5",
-                              color:
-                                status === "Cancelled"
-                                  ? "#b91c1c"
-                                  : status === "Payment Not Received"
-                                  ? "#c2410c"
-                                  : "#047857",
-                            }}
-                          >
-                            {status}
-                          </span>
-                        </td>
-
-                        <td style={tableCell}>
-                          {entry.date}
-                        </td>
-
-                        <td style={tableCell}>
-                          <input
-                            defaultValue={entry.adminNotes || ""}
-                            onBlur={(e) =>
-                              saveAdminNotes(
-                                entry.orderId,
-                                e.target.value
-                              )
-                            }
-                            placeholder="Add note"
-                            style={{
-                              ...S.input,
-                              minWidth: 150,
-                              padding: "8px 10px",
-                              fontSize: 12,
-                            }}
-                          />
-                        </td>
-
-                        <td style={tableCell}>
+                        <td style={cell}>{entry.date}</td>
+                        <td style={cell}>
                           <div
                             style={{
                               display: "flex",
                               gap: 6,
                               flexWrap: "wrap",
-                              alignItems: "center",
                             }}
                           >
-                            {status !== "Cancelled" && (
+                            {entry.status !== "Cancelled" && (
                               <select
-                                value={status}
+                                value={entry.status}
                                 onChange={(e) =>
-                                  onStatusChange(
-                                    entry,
-                                    e.target.value
-                                  )
+                                  onStatusChange(entry, e.target.value)
                                 }
                                 style={{
                                   border: "1px solid #d1d5db",
                                   borderRadius: 8,
-                                  padding: "6px 8px",
+                                  padding: 6,
                                   fontSize: 11,
-                                  background: "#fff",
-                                  color: "#334155",
                                 }}
                               >
-                                <option value="Complete">
-                                  Complete
-                                </option>
-                                <option value="Payment Not Received">
-                                  Payment Not Received
-                                </option>
+                                <option>Complete</option>
+                                <option>Payment Not Received</option>
                               </select>
                             )}
-
-                            {onReprint && (
+                            <button
+                              onClick={() => onReprint(entry)}
+                              style={{
+                                ...styles.button,
+                                padding: "7px 9px",
+                                background: "#111827",
+                                color: "#fff",
+                                fontSize: 11,
+                              }}
+                            >
+                              🖨️
+                            </button>
+                            {entry.status !== "Cancelled" && (
                               <button
-                                onClick={() => onReprint(entry)}
+                                onClick={() => onCancel(entry)}
                                 style={{
-                                  ...S.button,
-                                  padding: "7px 10px",
-                                  background: "#111827",
-                                  color: "#fff",
-                                  fontSize: 11,
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                🖨️ Reprint
-                              </button>
-                            )}
-
-                            {status === "Cancelled" ? (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  padding: "5px 8px",
-                                  borderRadius: 8,
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  background: "#fef2f2",
-                                  color: "#b91c1c",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                CANCELLED
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => onCancelAdmin(entry)}
-                                style={{
-                                  ...S.button,
-                                  padding: "7px 10px",
+                                  ...styles.button,
+                                  padding: "7px 9px",
                                   background: "#fef2f2",
                                   color: "#b91c1c",
                                   fontSize: 11,
-                                  whiteSpace: "nowrap",
                                 }}
                               >
                                 Cancel
                               </button>
                             )}
                           </div>
+                          {category && (
+                            <span style={{ display: "none" }}>
+                              {category.name}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -3794,996 +1908,841 @@ function AdminReceived({
               </table>
             </div>
           )}
-
         </div>
-
       </div>
     </div>
   );
 }
 
-/* =========================================================
-   COMMON STYLES
-========================================================= */
+function Stat({ label, value }) {
+  return (
+    <div style={{ ...styles.card, padding: 15 }}>
+      <div
+        style={{
+          fontSize: 10,
+          color: "#64748b",
+          fontWeight: 900,
+          letterSpacing: 0.7,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 900, marginTop: 7 }}>{value}</div>
+    </div>
+  );
+}
 
-const modalStyles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background:
-      "rgba(15,23,42,.55)",
-    backdropFilter: "blur(5px)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-    zIndex: 100,
-  },
+function StatusBadge({ status }) {
+  const cancelled = status === "Cancelled";
+  const pending = status === "Payment Not Received";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        padding: "5px 8px",
+        borderRadius: 8,
+        fontWeight: 800,
+        fontSize: 10,
+        whiteSpace: "nowrap",
+        background: cancelled ? "#fef2f2" : pending ? "#fff7ed" : "#ecfdf5",
+        color: cancelled ? "#b91c1c" : pending ? "#c2410c" : "#047857",
+      }}
+    >
+      {status}
+    </span>
+  );
+}
 
-  modal: {
-    width: "min(520px, 100%)",
-    background: "#fff",
-    borderRadius: 24,
-    padding: 30,
-    boxShadow:
-      "0 30px 80px rgba(0,0,0,.22)",
-  },
-};
 function AdminLoginModal({ onClose, onSuccess }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
-    if (!username.trim() || !password) {
-      setError("Username and password are required.");
-      return;
-    }
-
+  async function submit() {
     try {
       setLoading(true);
       setError("");
-
-      const payload = await adminLogin(
-        username.trim(),
-        password
-      );
-
-      sessionStorage.setItem(
-        "svara_admin_token",
-        payload.token
-      );
-
-      onSuccess();
-    } catch (error) {
-      setError(
-        error.message ||
-        "Invalid admin credentials."
-      );
+      const result = await adminLogin(username.trim(), password);
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, result.token);
+      onSuccess(result);
+    } catch (e) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={modalStyles.overlay}>
-      <div
-        style={{
-          ...modalStyles.modal,
-          maxWidth: 420,
-        }}
-      >
-        <h2
+    <Modal>
+      <h2 style={{ margin: 0 }}>Admin Login</h2>
+      <p style={{ color: "#64748b", fontSize: 13 }}>
+        Access Admin Received for all dashboards under your account.
+      </p>
+      <Field label="Username">
+        <input
+          autoFocus
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          style={styles.input}
+        />
+      </Field>
+      <Field label="Password">
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={styles.input}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+        <button
+          onClick={onClose}
           style={{
-            margin: 0,
-            fontSize: 22,
-            fontWeight: 900,
+            ...styles.button,
+            flex: 1,
+            background: "#f3f4f6",
+            color: "#374151",
           }}
         >
-          Admin Login
-        </h2>
-
-        <p
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={loading}
           style={{
-            color: "#64748b",
-            fontSize: 13,
-            marginTop: 7,
+            ...styles.button,
+            flex: 1,
+            background: "#111827",
+            color: "#fff",
+          }}
+        >
+          {loading ? "Checking..." : "Login"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function AdminReceived({
+  dashboard,
+  dashboards,
+  onBack,
+  onRefresh,
+  onDownload,
+  onCreate,
+  onLogout,
+  onStatusChange,
+  onCancel,
+  onReprint,
+}) {
+  const [entries, setEntries] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [selectedDashboardId, setSelectedDashboardId] = useState(
+    dashboard?.id || "",
+  );
+  const [filter, setFilter] = useState("all");
+  const [error, setError] = useState("");
+
+  const activeDashboard =
+    dashboards.find((d) => d.id === selectedDashboardId) || dashboard;
+
+  async function load() {
+    if (!activeDashboard?.id) return;
+    try {
+      setError("");
+      const result = await getAdminRegistrations(activeDashboard.id);
+      setEntries(result.entries || []);
+      setSummary(result.summary || null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [selectedDashboardId]);
+
+  const filtered = entries.filter((entry) => {
+    if (filter === "payment") return entry.status === "Payment Not Received";
+    if (filter === "cancelled") return entry.status === "Cancelled";
+    return true;
+  });
+
+  async function changeStatus(entry, status) {
+    try {
+      await onStatusChange(activeDashboard.id, entry, status);
+      await load();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function cancel(entry) {
+    if (!window.confirm(`Cancel ${tokenRange(entry)}?`)) return;
+    try {
+      await onCancel(activeDashboard.id, entry);
+      await load();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function note(entry, notes) {
+    try {
+      await saveAdminNotes(activeDashboard.id, entry.id, notes);
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  return (
+    <div style={styles.page}>
+      <div
+        className="svara-container"
+        style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
             marginBottom: 22,
           }}
         >
-          Enter admin credentials to access Admin Received.
-        </p>
+          <button
+            onClick={onBack}
+            style={{
+              ...styles.button,
+              background: "transparent",
+              color: "#64748b",
+              paddingLeft: 0,
+            }}
+          >
+            ← Dashboards
+          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={onLogout}
+              style={{
+                ...styles.button,
+                background: "#f3f4f6",
+                color: "#374151",
+              }}
+            >
+              Admin Logout
+            </button>
+          </div>
+        </div>
 
-        <label style={S.label}>
-          Username
-        </label>
-
-        <input
-          value={username}
-          onChange={(e) =>
-            setUsername(e.target.value)
-          }
-          placeholder="Admin username"
-          style={{
-            ...S.input,
-            marginBottom: 15,
-          }}
-        />
-
-        <label style={S.label}>
-          Password
-        </label>
-
-        <input
-          type="password"
-          value={password}
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
-          placeholder="Admin password"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              handleLogin();
-            }
-          }}
-          style={S.input}
-        />
-
-        {error && (
+        <div style={{ marginBottom: 20 }}>
           <div
             style={{
-              color: "#dc2626",
-              fontSize: 12,
-              marginTop: 8,
+              color: "#7c3aed",
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 1.3,
             }}
           >
-            {error}
+            ADMIN DASHBOARD
           </div>
-        )}
+          <h1 style={{ margin: "5px 0" }}>Admin Received</h1>
+          <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
+            Admin access is shared across your dashboards.
+          </p>
+        </div>
+
+        <div style={{ marginBottom: 15 }}>
+          <label style={styles.label}>Dashboard</label>
+          <select
+            value={selectedDashboardId}
+            onChange={(e) => setSelectedDashboardId(e.target.value)}
+            style={styles.input}
+          >
+            {dashboards.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.association_name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div
-          className="svara-modal-actions"
+          className="svara-grid-4"
           style={{
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: "repeat(4,minmax(0,1fr))",
             gap: 10,
-            marginTop: 22,
+            marginBottom: 10,
           }}
         >
-          <button
-            onClick={onClose}
-            style={{
-              ...S.button,
-              flex: 1,
-              padding: "12px",
-              background: "#f3f4f6",
-              color: "#374151",
-            }}
-          >
-            Cancel
-          </button>
+          <Stat
+            label="TOTAL RECEIVED"
+            value={`₹${Number(summary?.totalAmountReceived || 0).toFixed(2)}`}
+          />
+          <Stat label="TOTAL ORDERS" value={summary?.totalOrders || 0} />
+          <Stat
+            label="PENDING TOKENS"
+            value={summary?.paymentNotReceivedTokens || 0}
+          />
+          <Stat
+            label="CANCELLED TOKENS"
+            value={summary?.cancelledTokens || 0}
+          />
+        </div>
 
-          <button
-            onClick={handleLogin}
-            disabled={loading}
+        <div
+          className="svara-grid-3"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+            gap: 10,
+            marginBottom: 18,
+          }}
+        >
+          {Object.entries(summary?.amountReceivedByCategory || {}).map(
+            ([name, value]) => (
+              <Stat
+                key={name}
+                label={`${name.toUpperCase()} RECEIVED`}
+                value={`₹${Number(value || 0).toFixed(2)}`}
+              />
+            ),
+          )}
+        </div>
+
+        {error && <ErrorText>{error}</ErrorText>}
+
+        <div style={{ ...styles.card, overflow: "hidden" }}>
+          <div
+            className="svara-actions"
             style={{
-              ...S.button,
-              flex: 1,
-              padding: "12px",
-              background: "#111827",
-              color: "#fff",
-              opacity: loading ? 0.7 : 1,
+              padding: 18,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              borderBottom: "1px solid #eef2f7",
             }}
           >
-            {loading ? "Checking..." : "Login"}
-          </button>
+            <div style={{ display: "flex", gap: 7 }}>
+              {[
+                ["all", "All"],
+                ["payment", "Payment Pending"],
+                ["cancelled", "Cancelled"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  style={{
+                    ...styles.button,
+                    padding: "7px 10px",
+                    fontSize: 11,
+                    background: filter === value ? "#111827" : "#f1f5f9",
+                    color: filter === value ? "#fff" : "#475569",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              <button
+                onClick={onCreate}
+                style={{
+                  ...styles.button,
+                  background: "#7c3aed",
+                  color: "#fff",
+                }}
+              >
+                + Create Token
+              </button>
+              <button
+                onClick={load}
+                style={{
+                  ...styles.button,
+                  background: "#f1f5f9",
+                  color: "#334155",
+                }}
+              >
+                ↻ Refresh
+              </button>
+              <button
+                onClick={() => onDownload(activeDashboard.id)}
+                style={{
+                  ...styles.button,
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                📥 Excel
+              </button>
+            </div>
+          </div>
+
+          {!filtered.length ? (
+            <div style={{ padding: 45, textAlign: "center", color: "#94a3b8" }}>
+              No registrations found.
+            </div>
+          ) : (
+            <div className="svara-table-wrap" style={{ overflowX: "auto" }}>
+              <table
+                className="svara-table"
+                style={{
+                  width: "100%",
+                  minWidth: 1150,
+                  borderCollapse: "collapse",
+                  fontSize: 12,
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: "#f8fafc",
+                      color: "#64748b",
+                      fontSize: 10,
+                    }}
+                  >
+                    {[
+                      "TOKEN",
+                      "CATEGORY",
+                      "CUSTOMER",
+                      "PHONE",
+                      "QTY",
+                      "AMOUNT",
+                      "PAYMENT",
+                      "STATUS",
+                      "DATE",
+                      "NOTES",
+                      "ACTION",
+                    ].map((x) => (
+                      <th
+                        key={x}
+                        style={{ padding: "11px 12px", textAlign: "left" }}
+                      >
+                        {x}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      style={{ borderTop: "1px solid #f1f5f9" }}
+                    >
+                      <td style={cell}>{tokenRange(entry)}</td>
+                      <td style={cell}>{entry.categoryName}</td>
+                      <td style={{ ...cell, fontWeight: 800 }}>{entry.name}</td>
+                      <td style={cell}>{entry.phone}</td>
+                      <td style={cell}>{entry.quantity}</td>
+                      <td style={cell}>₹{Number(entry.amount).toFixed(2)}</td>
+                      <td style={cell}>{entry.payment}</td>
+                      <td style={cell}>
+                        <StatusBadge status={entry.status} />
+                      </td>
+                      <td style={cell}>{entry.date}</td>
+                      <td style={cell}>
+                        <input
+                          defaultValue={entry.adminNotes || ""}
+                          onBlur={(e) => note(entry, e.target.value)}
+                          style={{
+                            ...styles.input,
+                            width: 150,
+                            padding: "7px 8px",
+                            fontSize: 11,
+                          }}
+                          placeholder="Admin note"
+                        />
+                      </td>
+                      <td style={cell}>
+                        <div
+                          style={{ display: "flex", gap: 5, flexWrap: "wrap" }}
+                        >
+                          {entry.status !== "Cancelled" && (
+                            <select
+                              value={entry.status}
+                              onChange={(e) =>
+                                changeStatus(entry, e.target.value)
+                              }
+                              style={{
+                                border: "1px solid #d1d5db",
+                                borderRadius: 7,
+                                padding: 5,
+                                fontSize: 10,
+                              }}
+                            >
+                              <option>Complete</option>
+                              <option>Payment Not Received</option>
+                            </select>
+                          )}
+                          <button
+                            onClick={() =>
+                              onReprint(entry, activeDashboard.association_name)
+                            }
+                            style={{
+                              ...styles.button,
+                              padding: "6px 8px",
+                              background: "#111827",
+                              color: "#fff",
+                              fontSize: 10,
+                            }}
+                          >
+                            🖨️
+                          </button>
+                          {entry.status !== "Cancelled" && (
+                            <button
+                              onClick={() => cancel(entry)}
+                              style={{
+                                ...styles.button,
+                                padding: "6px 8px",
+                                background: "#fef2f2",
+                                color: "#b91c1c",
+                                fontSize: 10,
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function CancelTokenModal({ entry, onCancel, onConfirm }) {
-  const [password, setPassword] = useState("");
+const cell = {
+  padding: "12px",
+  color: "#475569",
+  verticalAlign: "middle",
+};
+
+export default function App() {
+  const [auth, setAuth] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [dashboards, setDashboards] = useState([]);
+  const [selectedDashboard, setSelectedDashboard] = useState(null);
+  const [dashboardDetails, setDashboardDetails] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [screen, setScreen] = useState("dashboards");
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showAdminSetup, setShowAdminSetup] = useState(false);
+  const [successEntry, setSuccessEntry] = useState(null);
 
-  async function handleCancel() {
-    if (!password) {
-      setError("Please enter the cancellation password.");
-      return;
-    }
-
+  async function loadAccount() {
     try {
       setLoading(true);
       setError("");
 
-      await onConfirm(password);
-    } catch (error) {
-      setError(error.message || "Unable to cancel token.");
+      const me = await getMe();
+      setAuth(me);
+
+      const result = await getDashboards();
+      setDashboards(result.dashboards || []);
+
+      if (
+        !me.adminUsername &&
+        !sessionStorage.getItem("svara_v5_admin_setup_seen")
+      ) {
+        setShowAdminSetup(true);
+      }
+    } catch (e) {
+      sessionStorage.removeItem(USER_TOKEN_KEY);
+      setAuth(null);
+      setError("");
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div style={modalStyles.overlay}>
-      <div
-        style={{
-          ...modalStyles.modal,
-          maxWidth: 430,
-        }}
-      >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: 21,
-            fontWeight: 900,
-          }}
-        >
-          Cancel Token
-        </h2>
-
-        <p
-          style={{
-            color: "#64748b",
-            fontSize: 13,
-            marginTop: 8,
-            lineHeight: 1.5,
-          }}
-        >
-          Enter the cancellation password to confirm this cancellation.
-        </p>
-
-        <div
-          style={{
-            background: "#f8fafc",
-            borderRadius: 12,
-            padding: 14,
-            margin: "18px 0",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            Order ID
-          </div>
-
-          <strong>{entry.orderId}</strong>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "#64748b",
-            }}
-          >
-            Token
-          </div>
-
-          <strong>
-            {entry.tokenStart}
-            {entry.tokenEnd &&
-            entry.tokenEnd !== entry.tokenStart
-              ? ` – ${entry.tokenEnd}`
-              : ""}
-          </strong>
-        </div>
-
-        <label style={S.label}>
-          Cancellation Password
-        </label>
-
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Enter cancellation password"
-          type="password"
-          autoFocus
-          style={S.input}
-        />
-
-        {error && (
-          <div
-            style={{
-              color: "#dc2626",
-              fontSize: 12,
-              marginTop: 7,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <div
-          className="svara-modal-actions"
-          style={{
-            display: "flex",
-            gap: 10,
-            marginTop: 22,
-          }}
-        >
-          <button
-            onClick={onCancel}
-            style={{
-              ...S.button,
-              flex: 1,
-              padding: "12px",
-              background: "#f3f4f6",
-              color: "#374151",
-            }}
-          >
-            Go Back
-          </button>
-
-          <button
-            onClick={handleCancel}
-            disabled={loading}
-            style={{
-              ...S.button,
-              flex: 1,
-              padding: "12px",
-              background: "#dc2626",
-              color: "#fff",
-              opacity: loading ? 0.7 : 1,
-            }}
-          >
-            {loading ? "Cancelling..." : "Cancel Token"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-const tableHeader = {
-  textAlign: "left",
-  padding: "12px 16px",
-  fontWeight: 800,
-};
-
-
-const tableCell = {
-  padding: "13px 16px",
-  color: "#475569",
-};
-
-
-/* =========================================================
-   ERROR STYLE
-========================================================= */
-
-S.error = {
-  color: "#dc2626",
-  fontSize: 11,
-  marginTop: 5,
-};
-
-
-/* =========================================================
-   ROOT APP
-========================================================= */
-
-export default function App() {
-  const [screen, setScreen] =
-    useState("dashboard");
-
-  const [activeType, setActiveType] =
-    useState(null);
-
-  const [entries, setEntries] =
-    useState([]);
-
-  const [successEntry, setSuccessEntry] =
-    useState(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [loadError, setLoadError] =
-    useState("");
-  const [showAdminLogin, setShowAdminLogin] =
-    useState(false);
-
-  const [cancelTarget, setCancelTarget] =
-    useState(null);
-
-  const [adminEntries, setAdminEntries] =
-  useState([]);
-
-const [adminSummary, setAdminSummary] =
-  useState(null);
-
-  const [, setAdminCreate] =
-    useState(false);
-
-
   useEffect(() => {
-    loadEntries()
-      .then((data) => {
-        setEntries(
-          Array.isArray(data)
-            ? data
-            : []
-        );
-      })
-      .catch((error) => {
-        console.error(error);
-        setLoadError(
-          "Unable to connect to the SVARA server."
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-  useEffect(() => {
-
-  if (
-    loading ||
-    loadError
-  ) {
-    return;
-  }
-
-
-  const refreshEntries =
-    async () => {
-
-      try {
-
-        const data =
-          await loadEntries();
-
-
-        setEntries(
-          Array.isArray(data)
-            ? data
-            : []
-        );
-
-      } catch (error) {
-
-        console.error(
-          "Background refresh failed:",
-          error
-        );
-
-      }
-
-    };
-
-
-  /*
-   * Every browser gets the
-   * latest central Excel data
-   * every 5 seconds.
-   */
-
-  const intervalId =
-    setInterval(
-      refreshEntries,
-      5000
-    );
-
-
-  return () => {
-
-    clearInterval(
-      intervalId
-    );
-
-  };
-
-}, [
-  loading,
-  loadError,
-]);
-
-const [saving, setSaving] = useState(false);
-async function handleSubmit(entry) {
-  if (saving) return;
-
-  try {
-    setSaving(true);
-
-    const savedEntry = await saveEntry(entry);
-
-    setEntries((current) => [
-      ...current,
-      savedEntry,
-    ]);
-
-    setScreen("dashboard");
-    setSuccessEntry(savedEntry);
-
-  } catch (error) {
-    alert(
-      error.message ||
-        "Unable to save registration. Please try again."
-    );
-  } finally {
-    setSaving(false);
-  }
-}
-
-
-async function handleAdminCreate(entry) {
-  if (saving) return;
-
-  try {
-    setSaving(true);
-
-    const savedEntry = await saveAdminEntry(entry);
-
-    setEntries((current) => [
-      ...current,
-      savedEntry,
-    ]);
-
-    setAdminCreate(false);
-    setScreen("admin");
-    setSuccessEntry(savedEntry);
-    await refreshAdmin();
-  } catch (error) {
-    alert(
-      error.message ||
-        "Unable to create token."
-    );
-  } finally {
-    setSaving(false);
-  }
-}
-
-function handleClear() {
-  if (!entries.length) {
-    return;
-  }
-
-  openAdmin();
-}
-
-async function refreshAdmin() {
-  try {
-    const data = await loadAdminData();
-
-    setAdminEntries(
-      Array.isArray(data.entries)
-        ? data.entries
-        : []
-    );
-
-    setAdminSummary(
-      data.summary || null
-    );
-  } catch (error) {
-    alert(
-      error.message ||
-      "Unable to load admin data."
-    );
-
-    setScreen("dashboard");
-  }
-}
-
-
-function openAdmin() {
-  const token =
-    sessionStorage.getItem(
-      "svara_admin_token"
-    );
-
-  if (!token) {
-    setShowAdminLogin(true);
-    return;
-  }
-
-  setScreen("admin");
-  refreshAdmin();
-}
-
-
-function handleAdminLoginSuccess() {
-  setShowAdminLogin(false);
-  setScreen("admin");
-  refreshAdmin();
-}
-
-
-function logoutAdmin() {
-  sessionStorage.removeItem(
-    "svara_admin_token"
-  );
-
-  setAdminEntries([]);
-  setAdminSummary(null);
-  setScreen("dashboard");
-}
-
-
-async function handleStatusChange(
-  entry,
-  status
-) {
-  try {
-    const updatedEntry =
-      await updateEntryStatus(
-        entry.orderId,
-        status
-      );
-
-    setEntries((current) =>
-      current.map((item) =>
-        item.orderId ===
-        updatedEntry.orderId
-          ? updatedEntry
-          : item
-      )
-    );
-
-    setAdminEntries((current) =>
-      current.map((item) =>
-        item.orderId ===
-        updatedEntry.orderId
-          ? updatedEntry
-          : item
-      )
-    );
-
-    if (sessionStorage.getItem("svara_admin_token")) {
-      await refreshAdmin();
+    if (getUserToken()) {
+      loadAccount();
+    } else {
+      setLoading(false);
     }
-  } catch (error) {
-    alert(
-      error.message ||
-      "Unable to update status."
-    );
-  }
-}
+  }, []);
 
+  async function openDashboard(dashboard) {
+    try {
+      setLoading(true);
+      const [details, registrationResult] = await Promise.all([
+        getDashboardDetails(dashboard.id),
+        getRegistrations(dashboard.id),
+      ]);
 
-async function handleAdminClear() {
-  if (!adminEntries.length) {
-    return;
-  }
-
-  const confirmed =
-    window.confirm(
-      "Are you sure you want to clear all registrations?"
-    );
-
-  if (!confirmed) {
-    return;
+      setSelectedDashboard(dashboard);
+      setDashboardDetails(details);
+      setEntries(registrationResult.entries || []);
+      setScreen("dashboard");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  try {
-    const token =
-      sessionStorage.getItem(
-        "svara_admin_token"
-      );
+  async function refreshCurrentDashboard() {
+    if (!selectedDashboard?.id) return;
+    const [details, registrationResult] = await Promise.all([
+      getDashboardDetails(selectedDashboard.id),
+      getRegistrations(selectedDashboard.id),
+    ]);
+    setDashboardDetails(details);
+    setEntries(registrationResult.entries || []);
+  }
 
-    await clearEntries(token);
-
+  function logout() {
+    sessionStorage.removeItem(USER_TOKEN_KEY);
+    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    setAuth(null);
+    setDashboards([]);
+    setSelectedDashboard(null);
+    setDashboardDetails(null);
     setEntries([]);
-    setAdminEntries([]);
-    setAdminSummary(null);
-
-    alert(
-      "All registrations have been cleared."
-    );
-
-    setScreen("dashboard");
-
-  } catch (error) {
-    alert(
-      error.message ||
-      "Unable to clear registrations."
-    );
+    setScreen("dashboards");
   }
-}
-
-async function handleAdminCancel(entry) {
-  const tokenText = entry.tokenEnd && entry.tokenEnd !== entry.tokenStart
-    ? `${entry.tokenStart} – ${entry.tokenEnd}` : entry.tokenStart;
-  if (!window.confirm(`Cancel token ${tokenText}?\n\nAdmin cancellation does not require the cancellation password.`)) return;
-  try {
-    const updatedEntry = await adminCancelEntry(entry.orderId);
-    setEntries((current) => current.map((item) => item.orderId === updatedEntry.orderId ? updatedEntry : item));
-    await refreshAdmin();
-  } catch (error) {
-    alert(error.message || "Unable to cancel token.");
-  }
-}
-
-
-async function handleCancel(entry, password) {
-  const updatedEntry = await cancelEntry(
-    entry.orderId,
-    password
-  );
-
-  setEntries((current) =>
-    current.map((item) =>
-      item.orderId === updatedEntry.orderId
-        ? updatedEntry
-        : item
-    )
-  );
-
-  setCancelTarget(null);
-
- const tokenMessage =
-  updatedEntry.tokenEnd &&
-  updatedEntry.tokenEnd !== updatedEntry.tokenStart
-    ? `${updatedEntry.tokenStart} – ${updatedEntry.tokenEnd}`
-    : updatedEntry.tokenStart;
-
-alert(
-  `Token${Number(updatedEntry.quantity) > 1 ? "s" : ""} ${tokenMessage} cancelled successfully.`
-);
-}
-
-
-
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background:
-            "linear-gradient(135deg,#f8fafc,#f5f3ff)",
-          fontFamily:
-            "'Inter','Segoe UI',sans-serif",
-        }}
-      >
-
-        <div style={{ textAlign: "center" }}>
-
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              borderRadius: 18,
-              background:
-                "linear-gradient(135deg,#111827,#4c1d95)",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 900,
-              fontSize: 22,
-              margin: "0 auto 15px",
-            }}
-          >
-            S
-          </div>
-
-          <div
-            style={{
-              fontWeight: 800,
-              color: "#334155",
-            }}
-          >
-            Loading SVARA...
-          </div>
-
-        </div>
-
-      </div>
-    );
-  }
-
-
-  if (loadError) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f8fafc",
-          fontFamily:
-            "'Inter','Segoe UI',sans-serif",
-        }}
-      >
-
+      <>
+        <style>{css}</style>
         <div
           style={{
-            background: "#fff",
-            padding: 35,
-            borderRadius: 20,
-            textAlign: "center",
-            boxShadow:
-              "0 10px 40px rgba(0,0,0,.08)",
+            ...styles.page,
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-
-          <div
-            style={{
-              fontSize: 40,
-              marginBottom: 12,
-            }}
-          >
-            ⚠️
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 25, fontWeight: 900 }}>SVARA</div>
+            <div style={{ color: "#64748b", marginTop: 7 }}>Loading...</div>
           </div>
-
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 20,
-            }}
-          >
-            Server Connection Error
-          </h2>
-
-          <p
-            style={{
-              color: "#64748b",
-              fontSize: 13,
-              marginTop: 8,
-            }}
-          >
-            {loadError}
-          </p>
-
-          <button
-            onClick={() =>
-              window.location.reload()
-            }
-            style={{
-              ...S.button,
-              marginTop: 12,
-              padding: "11px 20px",
-              background: "#111827",
-              color: "#fff",
-            }}
-          >
-            Retry
-          </button>
-
         </div>
-
-      </div>
+      </>
     );
   }
 
+  if (!auth) {
+    return (
+      <>
+        <style>{css}</style>
+        <LoginScreen
+          onLogin={(result) => {
+            setAuth({
+              user: result.user,
+              adminUsername: result.adminUsername,
+            });
+            setDashboards(result.dashboards || []);
+            setLoading(false);
+          }}
+        />
+      </>
+    );
+  }
 
- return (
-  <>
-    <style>{responsiveStyles}</style>
-    {showAdminLogin && (
-  <AdminLoginModal
-    onClose={() =>
-      setShowAdminLogin(false)
-    }
-    onSuccess={
-      handleAdminLoginSuccess
-    }
-  />
-)}
+  if (screen === "create-dashboard") {
+    return (
+      <>
+        <style>{css}</style>
+        <DashboardSetup
+          existingCount={dashboards.length}
+          onCancel={() => setScreen("dashboards")}
+          onCreated={async () => {
+            const result = await getDashboards();
+            setDashboards(result.dashboards || []);
+            setScreen("dashboards");
+          }}
+        />
+      </>
+    );
+  }
 
-    {cancelTarget && (
-      <CancelTokenModal
-        entry={cancelTarget}
-        onCancel={() =>
-          setCancelTarget(null)
-        }
-        onConfirm={(password) =>
-          handleCancel(
-            cancelTarget,
-            password
-          )
-        }
-      />
-    )}
+  if (screen === "register" && selectedDashboard && dashboardDetails) {
+    return (
+      <>
+        <style>{css}</style>
+        <RegistrationForm
+          dashboard={selectedDashboard}
+          categories={dashboardDetails.categories || []}
+          onBack={() => setScreen("dashboard")}
+          onSaved={(entry) => {
+            setEntries((current) => [entry, ...current]);
+            setScreen("dashboard");
+            setSuccessEntry(entry);
+          }}
+        />
+        {successEntry && (
+          <SuccessModal
+            entry={successEntry}
+            associationName={selectedDashboard.association_name}
+            onClose={() => setSuccessEntry(null)}
+          />
+        )}
+      </>
+    );
+  }
 
-    {successEntry && (
-      <SuccessModal
-          entry={successEntry}
-          onClose={() =>
-            setSuccessEntry(null)
+  if (screen === "dashboard" && selectedDashboard && dashboardDetails) {
+    return (
+      <>
+        <style>{css}</style>
+        <UserDashboard
+          dashboard={selectedDashboard}
+          categories={dashboardDetails.categories || []}
+          entries={entries}
+          onBack={() => {
+            setSelectedDashboard(null);
+            setDashboardDetails(null);
+            setScreen("dashboards");
+          }}
+          onCreate={() => setScreen("register")}
+          onRefresh={refreshCurrentDashboard}
+          onStatusChange={async (entry, status) => {
+            try {
+              const result = await updateRegistrationStatus(
+                selectedDashboard.id,
+                entry.id,
+                status,
+              );
+              setEntries((current) =>
+                current.map((item) =>
+                  item.id === result.entry.id ? result.entry : item,
+                ),
+              );
+            } catch (e) {
+              alert(e.message);
+            }
+          }}
+          onCancel={async (entry) => {
+            if (
+              !window.confirm(
+                `Cancel ${tokenRange(entry)}? Cancelled token numbers will become reusable.`,
+              )
+            )
+              return;
+            try {
+              const result = await cancelRegistration(
+                selectedDashboard.id,
+                entry.id,
+              );
+              setEntries((current) =>
+                current.map((item) =>
+                  item.id === result.entry.id ? result.entry : item,
+                ),
+              );
+            } catch (e) {
+              alert(e.message);
+            }
+          }}
+          onReprint={(entry) =>
+            printLabels(entry, selectedDashboard.association_name)
           }
+        />
+        {successEntry && (
+          <SuccessModal
+            entry={successEntry}
+            associationName={selectedDashboard.association_name}
+            onClose={() => setSuccessEntry(null)}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (screen === "admin") {
+    return (
+      <>
+        <style>{css}</style>
+        <AdminReceived
+          dashboard={dashboards[0]}
+          dashboards={dashboards}
+          onBack={() => setScreen("dashboards")}
+          onRefresh={() => {}}
+          onDownload={downloadAdminExcel}
+          onCreate={() => {
+            const first = dashboards[0];
+            if (first) {
+              openDashboard(first).then(() => setScreen("register"));
+            }
+          }}
+          onLogout={() => {
+            sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+            setScreen("dashboards");
+          }}
+          onStatusChange={async (dashboardId, entry, status) => {
+            await updateAdminStatus(dashboardId, entry.id, status);
+          }}
+          onCancel={async (dashboardId, entry) => {
+            await cancelAdminRegistration(dashboardId, entry.id);
+          }}
+          onReprint={printLabels}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{css}</style>
+
+      <DashboardHome
+        dashboards={dashboards}
+        selected={selectedDashboard}
+        user={auth.user}
+        hasAdmin={!!auth.adminUsername}
+        onSelect={openDashboard}
+        onCreate={() => setScreen("create-dashboard")}
+        onAdmin={() => {
+          if (!auth.adminUsername) {
+            setShowAdminSetup(true);
+          } else if (getAdminToken()) {
+            setScreen("admin");
+          } else {
+            setShowAdminLogin(true);
+          }
+        }}
+        onLogout={logout}
+      />
+
+      {showAdminLogin && (
+        <AdminLoginModal
+          onClose={() => setShowAdminLogin(false)}
+          onSuccess={() => {
+            setShowAdminLogin(false);
+            setScreen("admin");
+          }}
         />
       )}
 
-
-      {screen === "dashboard" ? (
-  <Dashboard
-    entries={entries}
-
-    onSelect={(type) => {
-      setActiveType(type);
-      setScreen("form");
-    }}
-
-    onClear={handleClear}
-
-    onCancel={(entry) =>
-      setCancelTarget(entry)
-    }
-
-    onStatusChange={
-      handleStatusChange
-    }
-
-    onReprint={printLabels}
-
-    onAdmin={openAdmin}
-  />
-
-) : screen === "admin" ? (
-
-  <AdminReceived
-    adminEntries={adminEntries}
-    adminSummary={adminSummary}
-
-    onBack={() =>
-      setScreen("dashboard")
-    }
-
-    onRefresh={refreshAdmin}
-
-    onDownload={
-      downloadAdminExcel
-    }
-
-    onClear={
-      handleAdminClear
-    }
-
-    onLogout={
-      logoutAdmin
-    }
-
-    onCreate={() => {
-      setActiveType("Bullet");
-      setAdminCreate(true);
-      setScreen("admin-create");
-    }}
-
-    onStatusChange={
-      handleStatusChange
-    }
-
-    onCancelAdmin={
-      handleAdminCancel
-    }
-
-    onReprint={
-      printLabels
-    }
-  />
-
-) : screen === "admin-create" ? (
-
-  <FormScreen
-    type={activeType}
-    entries={entries}
-    onSubmit={handleAdminCreate}
-    onBack={() => {
-      setAdminCreate(false);
-      setScreen("admin");
-    }}
-    adminMode
-  />
-
-) : (
-
-  <FormScreen
-    type={activeType}
-    entries={entries}
-    onSubmit={handleSubmit}
-    onBack={() =>
-      setScreen("dashboard")
-    }
-  />
-
-)}
-
+      {showAdminSetup && (
+        <AdminCredentialsSetup
+          onDone={() => {
+            sessionStorage.setItem("svara_v5_admin_setup_seen", "1");
+            setShowAdminSetup(false);
+            loadAccount();
+          }}
+          onSkip={() => {
+            sessionStorage.setItem("svara_v5_admin_setup_seen", "1");
+            setShowAdminSetup(false);
+          }}
+        />
+      )}
     </>
   );
 }
