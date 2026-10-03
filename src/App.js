@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
-const USER_TOKEN_KEY = "svara_v5_user_token";
-const ADMIN_TOKEN_KEY = "svara_v5_admin_token";
+const USER_TOKEN_KEY = "spya_v5_user_token";
+const ADMIN_TOKEN_KEY = "spya_v5_admin_token";
 
 const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
 
@@ -88,8 +88,13 @@ async function api(path, options = {}, token = null) {
     : await response.text();
 
   if (!response.ok) {
-    const message =
-      typeof data === "object" ? data.error || data.message : data;
+    let message = typeof data === "object" ? data.error || data.message : data;
+    if (
+      typeof message === "string" &&
+      /<\/?html|<\/?body|<!doctype/i.test(message)
+    ) {
+      message = `Server error (${response.status}). Please try again.`;
+    }
     throw new Error(message || `Request failed (${response.status}).`);
   }
 
@@ -104,17 +109,17 @@ function getAdminToken() {
   return sessionStorage.getItem(ADMIN_TOKEN_KEY) || "";
 }
 
-async function requestOtp(channel, contact) {
+async function requestOtp(email) {
   return api("/api/v5/auth/request-otp", {
     method: "POST",
-    body: JSON.stringify({ channel, contact }),
+    body: JSON.stringify({ email }),
   });
 }
 
-async function verifyOtp(channel, contact, otp) {
+async function verifyOtp(email, otp) {
   return api("/api/v5/auth/verify-otp", {
     method: "POST",
-    body: JSON.stringify({ channel, contact, otp }),
+    body: JSON.stringify({ email, otp }),
   });
 }
 
@@ -276,7 +281,7 @@ function tokenRange(entry) {
     : entry.tokenStart;
 }
 
-function printLabels(entry, associationName = "SVARA") {
+function printLabels(entry, associationName = "SPYA") {
   const quantity = Number(entry.quantity) || 1;
   const start = Number(
     String(entry.tokenStart || "").match(/(\d+)$/)?.[1] || 0,
@@ -299,7 +304,7 @@ function printLabels(entry, associationName = "SVARA") {
         { length: 2 },
         () => `
       <div class="label">
-        <div class="brand">${escapeHtml(associationName || "SVARA")}</div>
+        <div class="brand">${escapeHtml(associationName || "SPYA")}</div>
         <div class="datetime">
           <span>${escapeHtml(entry.date || "")}</span>
           <span>|</span>
@@ -329,7 +334,7 @@ function printLabels(entry, associationName = "SVARA") {
     <!doctype html>
     <html>
     <head>
-      <title>SVARA Token Labels</title>
+      <title>SPYA Token Labels</title>
       <style>
         *{box-sizing:border-box}
         @page{size:80mm auto;margin:0}
@@ -374,17 +379,21 @@ function ErrorText({ children }) {
 }
 
 function LoginScreen({ onLogin }) {
-  const [channel, setChannel] = useState("email");
-  const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("contact");
+  const [step, setStep] = useState("email");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   async function sendOtp() {
-    if (!contact.trim()) {
-      setError(`Enter your ${channel}.`);
+    const value = email.trim();
+    if (!value) {
+      setError("Enter your email address.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setError("Enter a valid email address.");
       return;
     }
 
@@ -392,9 +401,9 @@ function LoginScreen({ onLogin }) {
       setLoading(true);
       setError("");
       setMessage("");
-      await requestOtp(channel, contact.trim());
+      await requestOtp(value);
       setStep("otp");
-      setMessage(`OTP sent to your ${channel}.`);
+      setMessage(`OTP sent to ${value}.`);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -411,7 +420,7 @@ function LoginScreen({ onLogin }) {
     try {
       setLoading(true);
       setError("");
-      const result = await verifyOtp(channel, contact.trim(), otp.trim());
+      const result = await verifyOtp(email.trim(), otp.trim());
 
       sessionStorage.setItem(USER_TOKEN_KEY, result.token);
       onLogin(result);
@@ -453,55 +462,27 @@ function LoginScreen({ onLogin }) {
               S
             </div>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
-              SVARA
+              SPYA
             </div>
             <h1 style={{ margin: "8px 0 5px", fontSize: 27 }}>
-              {step === "contact" ? "Welcome back" : "Verify OTP"}
+              {step === "email" ? "Welcome back" : "Verify OTP"}
             </h1>
             <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-              {step === "contact"
-                ? "Sign in with your email or phone number."
-                : `Enter the OTP sent to ${contact}.`}
+              {step === "email"
+                ? "Sign in with your email address."
+                : `Enter the OTP sent to ${email}.`}
             </p>
           </div>
 
-          {step === "contact" ? (
+          {step === "email" ? (
             <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 8,
-                  marginBottom: 17,
-                }}
-              >
-                {["email", "phone"].map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => setChannel(item)}
-                    style={{
-                      ...styles.button,
-                      background: channel === item ? "#f5f3ff" : "#f8fafc",
-                      color: channel === item ? "#6d28d9" : "#64748b",
-                      border:
-                        channel === item
-                          ? "1px solid #c4b5fd"
-                          : "1px solid #e5e7eb",
-                    }}
-                  >
-                    {item === "email" ? "✉️ Email" : "📱 Phone"}
-                  </button>
-                ))}
-              </div>
-
-              <Field label={channel === "email" ? "Email" : "Phone Number"}>
+              <Field label="Email">
                 <input
                   autoFocus
-                  value={contact}
-                  onChange={(e) => setContact(e.target.value)}
-                  placeholder={
-                    channel === "email" ? "you@example.com" : "+91 9876543210"
-                  }
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
                   style={styles.input}
                   onKeyDown={(e) => e.key === "Enter" && sendOtp()}
                 />
@@ -557,7 +538,7 @@ function LoginScreen({ onLogin }) {
 
               <button
                 onClick={() => {
-                  setStep("contact");
+                  setStep("email");
                   setOtp("");
                   setError("");
                   setMessage("");
@@ -570,7 +551,7 @@ function LoginScreen({ onLogin }) {
                   marginTop: 8,
                 }}
               >
-                ← Change email / phone
+                ← Change email
               </button>
             </>
           )}
@@ -718,7 +699,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
                   value={associationName}
                   onChange={(e) => setAssociationName(e.target.value)}
                   style={styles.input}
-                  placeholder="SVARA Association"
+                  placeholder="SPYA Association"
                 />
               </Field>
               <Field label="Contact Phone">
@@ -1032,14 +1013,14 @@ function DashboardHome({
           }}
         >
           <div>
-            <div style={{ fontWeight: 900, letterSpacing: 1.5 }}>SVARA</div>
+            <div style={{ fontWeight: 900, letterSpacing: 1.5 }}>SPYA</div>
             <div style={{ color: "#94a3b8", fontSize: 10, letterSpacing: 1 }}>
               TOKEN MANAGEMENT V5
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ color: "#64748b", fontSize: 12 }}>
-              {user?.email || user?.phone || "User"}
+              {user?.email || "User"}
             </span>
             <button
               onClick={onLogout}
@@ -1063,7 +1044,7 @@ function DashboardHome({
               letterSpacing: 1.5,
             }}
           >
-            WELCOME TO SVARA
+            WELCOME TO SPYA
           </div>
           <h1 style={{ margin: "5px 0", fontSize: 34 }}>Your Dashboards</h1>
           <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
@@ -2530,7 +2511,7 @@ export default function App() {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 25, fontWeight: 900 }}>SVARA</div>
+            <div style={{ fontSize: 25, fontWeight: 900 }}>SPYA</div>
             <div style={{ color: "#64748b", marginTop: 7 }}>Loading...</div>
           </div>
         </div>
