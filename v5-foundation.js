@@ -141,7 +141,11 @@ async function sendOtp(destination, otp) {
       text: `Your SPYA verification code is ${otp}. It expires in 10 minutes.`,
     }),
   });
-  if (!r.ok) throw new Error("Unable to send email OTP.");
+  if (!r.ok) {
+  const errorBody = await r.text();
+  console.error("RESEND ERROR:", r.status, errorBody);
+  throw new Error(`Resend email failed (${r.status}): ${errorBody}`);
+}
 }
 
 module.exports = function registerV5(app) {
