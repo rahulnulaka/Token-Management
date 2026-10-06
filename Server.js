@@ -2432,7 +2432,7 @@ function normalizeV5RegistrationInput(body = {}) {
     });
   }
 
-  if (email && !/^[^\s@]+@[^\s@]+\[^\s@]+$/.test(email)) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw Object.assign(new Error("Enter a valid email address."), {
       statusCode: 400,
     });
