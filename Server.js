@@ -16,13 +16,21 @@ const { Pool } = require("pg");
 
 /* =========================================================
 
-   SVARA V5 - POSTGRESQL / MULTI-USER FOUNDATION
 
-   The existing Excel routes remain available during migration.
 
-   V5 routes are namespaced under /api/v5.
+   SPYA V5 - POSTGRESQL / MULTI-USER FOUNDATION
 
-========================================================= */
+
+
+   The existing Excel routes remain available during migration.
+
+
+
+   V5 routes are namespaced under /api/v5.
+
+
+
+\========================================================= */
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
 
@@ -31,108 +39,11 @@ const V5_AUTH_SECRET =
   process.env.ADMIN_TOKEN_SECRET ||
   crypto.randomBytes(32).toString("hex");
 
-const OTP_TTL_MS = 10 * 60 * 1000;
-
-const OTP_MAX_ATTEMPTS = 5;
-
-const OTP_RESEND_SECONDS = 60;
-
 const MAX_DASHBOARDS_PER_USER = 2;
-
-const pgPool = DATABASE_URL
-  ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl:
-        process.env.DATABASE_SSL === "false"
-          ? false
-          : { rejectUnauthorized: false },
-    })
-  : null;
-
-function requirePg() {
-  if (!pgPool) {
-    throw Object.assign(
-      new Error(
-        "PostgreSQL is not configured. Set DATABASE_URL on the backend.",
-      ),
-      { statusCode: 503 },
-    );
-  }
-
-  return pgPool;
-}
-
-function v5Base64Url(value) {
-  return Buffer.from(String(value)).toString("base64url");
-}
-
-function createV5Token(payload) {
-  const encoded = v5Base64Url(JSON.stringify(payload));
-
-  const sig = crypto
-    .createHmac("sha256", V5_AUTH_SECRET)
-    .update(encoded)
-    .digest("base64url");
-
-  return `${encoded}.${sig}`;
-}
-
-function verifyV5Token(token) {
-  try {
-    const [encoded, signature] = String(token || "").split(".");
-
-    if (!encoded || !signature) return null;
-
-    const expected = crypto
-      .createHmac("sha256", V5_AUTH_SECRET)
-      .update(encoded)
-      .digest("base64url");
-
-    const a = Buffer.from(signature);
-
-    const b = Buffer.from(expected);
-
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-
-    const payload = JSON.parse(
-      Buffer.from(encoded, "base64url").toString("utf8"),
-    );
-
-    if (!payload.exp || Number(payload.exp) <= Date.now()) return null;
-
-    return payload;
-  } catch (_) {
-    return null;
-  }
-}
-
-function getBearerToken(req) {
-  const header = String(req.headers.authorization || "");
-
-  return header.startsWith("Bearer ") ? header.slice(7) : "";
-}
-
-function requireV5User(req, res, next) {
-  const payload = verifyV5Token(getBearerToken(req));
-
-  if (!payload || payload.type !== "user" || !payload.sub) {
-    return res.status(401).json({ error: "V5 authentication required." });
-  }
-
-  req.v5UserId = payload.sub;
-
-  next();
-}
-
-function hashOtp(otp) {
-  return crypto
-    .createHash("sha256")
-    .update(`${otp}:${V5_AUTH_SECRET}`)
-    .digest("hex");
-}
 
 function hashAdminPassword(
   password,
+
   salt = crypto.randomBytes(16).toString("hex"),
 ) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
@@ -147,7 +58,9 @@ function verifyAdminPassword(password, stored) {
     if (!salt || !expectedHex) return false;
 
     const actual = crypto
+
       .scryptSync(String(password), salt, 64)
+
       .toString("hex");
 
     const a = Buffer.from(actual, "hex");
@@ -158,106 +71,6 @@ function verifyAdminPassword(password, stored) {
   } catch (_) {
     return false;
   }
-}
-
-function generateOtp() {
-  return String(crypto.randomInt(100000, 1000000));
-}
-
-async function sendV5Otp({ destination, channel, otp }) {
-  // Email: Resend free-tier compatible API. If no key is configured, log the OTP
-
-  // in development instead of silently pretending it was delivered.
-
-  if (channel === "email") {
-    const apiKey = process.env.RESEND_API_KEY;
-
-    const from = process.env.OTP_FROM_EMAIL;
-
-    if (!apiKey || !from) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[V5 DEV OTP] Email ${destination}: ${otp}`);
-
-        return { delivered: true, development: true };
-      }
-
-      throw new Error(
-        "Email OTP is not configured. Set RESEND_API_KEY and OTP_FROM_EMAIL.",
-      );
-    }
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-
-      body: JSON.stringify({
-        from,
-
-        to: [destination],
-
-        subject: "SVARA login OTP",
-
-        text: `Your SVARA verification code is ${otp}. It expires in 10 minutes.`,
-      }),
-    });
-
-    if (!response.ok) throw new Error("Unable to send email OTP.");
-
-    return { delivered: true };
-  } // SMS: provider-independent. MSG91 is supported when configured, but the
-  // application can run entirely on email OTP when SMS is unavailable.
-
-  const authKey = process.env.MSG91_AUTH_KEY;
-
-  const templateId = process.env.MSG91_TEMPLATE_ID;
-
-  if (!authKey || !templateId) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[V5 DEV OTP] SMS ${destination}: ${otp}`);
-
-      return { delivered: true, development: true };
-    }
-
-    throw new Error(
-      "SMS OTP is not configured. Use email OTP or configure the SMS provider.",
-    );
-  }
-
-  const response = await fetch("https://control.msg91.com/api/v5/otp", {
-    method: "POST",
-
-    headers: { authkey: authKey, "Content-Type": "application/json" },
-
-    body: JSON.stringify({ template_id: templateId, mobile: destination, otp }),
-  });
-
-  if (!response.ok) throw new Error("Unable to send SMS OTP.");
-
-  return { delivered: true };
-}
-
-function normalizeContact(channel, value) {
-  const contact = String(value || "").trim();
-
-  if (channel === "email") {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact))
-      throw Object.assign(new Error("Enter a valid email address."), {
-        statusCode: 400,
-      });
-
-    return contact.toLowerCase();
-  }
-
-  if (!/^\+?[\d\s\-()]{7,15}$/.test(contact))
-    throw Object.assign(new Error("Enter a valid phone number."), {
-      statusCode: 400,
-    });
-
-  return contact.replace(/[\s()-]/g, "");
 }
 
 function asyncRoute(fn) {
@@ -276,13 +89,21 @@ require("./v5-foundation")(app);
 
 /* =========================================================
 
-   V5 DATABASE CONNECTION TEST
 
-   Open http\://localhost:4000/api/v5/db-test while the
 
-   backend is running to verify PostgreSQL connectivity.
+   V5 DATABASE CONNECTION TEST
 
-========================================================= */
+
+
+   Open http\://localhost:4000/api/v5/db-test while the
+
+
+
+   backend is running to verify PostgreSQL connectivity.
+
+
+
+\========================================================= */
 
 app.get("/api/v5/db-test", async (req, res) => {
   try {
@@ -385,7 +206,23 @@ const TOKEN_PRICES = {
 
 
 
-   STATUS
+
+
+
+
+
+
+
+
+   STATUS
+
+
+
+
+
+
+
+
 
 
 
@@ -417,7 +254,23 @@ function normalizeStatus(value) {
 
 
 
-   NORMALIZE EXCEL ROW
+
+
+
+
+
+
+
+
+   NORMALIZE EXCEL ROW
+
+
+
+
+
+
+
+
 
 
 
@@ -429,31 +282,31 @@ function normalizeStatus(value) {
 
 function normalizeRow(row = {}) {
   return {
-    "Order ID": row["Order ID"] ?? row["Order Id"] ?? row.OrderID ?? "",
+    "Order ID": row["Order ID"] ?? row["Order Id"] ?? rowOrderID ?? "",
 
     "Token Type": row["Token Type"] ?? row["Token type"] ?? "",
 
-    Quantity: Number(row.Quantity ?? 0),
+    Quantity: Number(rowQuantity ?? 0),
 
     "Token Start": row["Token Start"] ?? "",
 
     "Token End": row["Token End"] ?? "",
 
-    Name: row.Name ?? "",
+    Name: rowName ?? "",
 
-    Email: row.Email ?? "",
+    Email: rowEmail ?? "",
 
-    Phone: row.Phone ?? "",
+    Phone: rowPhone ?? "",
 
-    Payment: row.Payment ?? row["Payment Mode"] ?? "",
+    Payment: rowPayment ?? row["Payment Mode"] ?? "",
 
-    Amount: Number(row.Amount ?? 0) || 0,
+    Amount: Number(rowAmount ?? 0) || 0,
 
-    Date: row.Date ?? "",
+    Date: rowDate ?? "",
 
-    Time: row.Time ?? "",
+    Time: rowTime ?? "",
 
-    Status: normalizeStatus(row.Status),
+    Status: normalizeStatus(rowStatus),
 
     "Cancelled At": row["Cancelled At"] ?? "",
 
@@ -469,7 +322,23 @@ function normalizeRow(row = {}) {
 
 
 
-   CONVERT ROW → CLIENT ENTRY
+
+
+
+
+
+
+
+
+   CONVERT ROW → CLIENT ENTRY
+
+
+
+
+
+
+
+
 
 
 
@@ -523,7 +392,23 @@ function toClientEntry(row) {
 
 
 
-   EXCEL LOCK CHECK
+
+
+
+
+
+
+
+
+   EXCEL LOCK CHECK
+
+
+
+
+
+
+
+
 
 
 
@@ -553,7 +438,23 @@ function isLockedFileError(err) {
 
 
 
-   EXCEL WRITE CHECK
+
+
+
+
+
+
+
+
+   EXCEL WRITE CHECK
+
+
+
+
+
+
+
+
 
 
 
@@ -597,7 +498,23 @@ function assertExcelIsWritable() {
 
 
 
-   READ EXCEL
+
+
+
+
+
+
+
+
+   READ EXCEL
+
+
+
+
+
+
+
+
 
 
 
@@ -638,7 +555,23 @@ function readExcel() {
 
 
 
-   WRITE EXCEL
+
+
+
+
+
+
+
+
+   WRITE EXCEL
+
+
+
+
+
+
+
+
 
 
 
@@ -752,7 +685,23 @@ function writeExcel(rows) {
 
 
 
-   TOKEN HELPERS
+
+
+
+
+
+
+
+
+   TOKEN HELPERS
+
+
+
+
+
+
+
+
 
 
 
@@ -796,7 +745,15 @@ function makeTokenId(
 
 
 
-   TOKEN ALLOCATION
+
+
+
+
+
+
+
+
+   TOKEN ALLOCATION
 
 
 
@@ -812,7 +769,6 @@ function makeTokenId(
 
 
 
-   Cancelled tokens are NOT considered used.
 
 
 
@@ -820,7 +776,40 @@ function makeTokenId(
 
 
 
-   Therefore they can be reused.
+
+
+
+
+
+
+
+
+
+   Cancelled tokens are NOT considered used.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Therefore they can be reused.
+
+
+
+
+
+
+
+
 
 
 
@@ -842,13 +831,13 @@ function getNextTokenSerial(
   for (const raw of rows) {
     const row = normalizeRow(raw);
 
-    if (row["Token Type"] !== tokenType || row.Status === "Cancelled") {
+    if (row["Token Type"] !== tokenType || rowStatus === "Cancelled") {
       continue;
     }
 
     const start = getSerialFromToken(row["Token Start"]);
 
-    const qty = Number(row.Quantity) || 0;
+    const qty = Number(rowQuantity) || 0;
 
     if (start > 0 && qty > 0) {
       for (let i = 0; i < qty; i++) {
@@ -894,7 +883,23 @@ function getNextTokenSerial(
 
 
 
-   ORDER NUMBER
+
+
+
+
+
+
+
+
+   ORDER NUMBER
+
+
+
+
+
+
+
+
 
 
 
@@ -930,7 +935,15 @@ function getNextOrderNumber(rows) {
 
 
 
-   EXCEL ALLOCATION LOCK
+
+
+
+
+
+
+
+
+   EXCEL ALLOCATION LOCK
 
 
 
@@ -946,7 +959,6 @@ function getNextOrderNumber(rows) {
 
 
 
-   Prevents two users from receiving
 
 
 
@@ -954,7 +966,40 @@ function getNextOrderNumber(rows) {
 
 
 
-   the same token/order.
+
+
+
+
+
+
+
+
+
+   Prevents two users from receiving
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   the same token/order.
+
+
+
+
+
+
+
+
 
 
 
@@ -986,7 +1031,23 @@ function withExcelAllocationLock(work) {
 
 
 
-   ADMIN AUTHENTICATION
+
+
+
+
+
+
+
+
+   ADMIN AUTHENTICATION
+
+
+
+
+
+
+
+
 
 
 
@@ -1005,7 +1066,7 @@ const ADMIN_TOKEN_SECRET =
     .createHash("sha256")
 
     .update(
-      `${process.env.ADMIN_USERNAME || ""}:${process.env.ADMIN_PASSWORD || ""}:SVARA-V3`,
+      `${process.env.ADMIN_USERNAME || ""}:${process.env.ADMIN_PASSWORD || ""}:SPYA-V3`,
     )
 
     .digest("hex");
@@ -1134,7 +1195,23 @@ function requireAdmin(
 
 
 
-   GET PUBLIC ENTRIES
+
+
+
+
+
+
+
+
+   GET PUBLIC ENTRIES
+
+
+
+
+
+
+
+
 
 
 
@@ -1176,7 +1253,23 @@ app.get(
 
 
 
-   CREATE ORDER
+
+
+
+
+
+
+
+
+   CREATE ORDER
+
+
+
+
+
+
+
+
 
 
 
@@ -1275,9 +1368,9 @@ async function createOrder(entry) {
 
       Amount: amount,
 
-      Date: now.toLocaleDateString("en-IN"),
+      Date: nowtoLocaleDateString("en-IN"),
 
-      Time: now.toLocaleTimeString(
+      Time: nowtoLocaleTimeString(
         "en-IN",
 
         {
@@ -1338,7 +1431,15 @@ app.post(
 
 
 
-   ADMIN CREATE ORDER
+
+
+
+
+   ADMIN CREATE ORDER
+
+
+
+
 
 
 
@@ -1384,7 +1485,15 @@ app.post(
 
 
 
-   UPDATE STATUS
+
+
+
+
+
+
+
+
+   UPDATE STATUS
 
 
 
@@ -1400,7 +1509,6 @@ app.post(
 
 
 
-   Complete ↔ Payment Not Received
 
 
 
@@ -1416,7 +1524,48 @@ app.post(
 
 
 
-   Cancelled cannot be changed.
+
+   Complete ↔ Payment Not Received
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Cancelled cannot be changed.
+
+
+
+
+
+
+
+
 
 
 
@@ -1462,7 +1611,7 @@ app.post(
 
         const row = normalizeRow(rows[index]);
 
-        if (row.Status === "Cancelled") {
+        if (rowStatus === "Cancelled") {
           throw Object.assign(
             new Error("Cancelled registrations cannot be changed."),
 
@@ -1472,7 +1621,7 @@ app.post(
           );
         }
 
-        row.Status = requested;
+        rowStatus = requested;
 
         rows[index] = row;
 
@@ -1506,7 +1655,15 @@ app.post(
 
 
 
-   CANCEL ORDER
+
+
+
+
+
+
+
+
+   CANCEL ORDER
 
 
 
@@ -1522,7 +1679,31 @@ app.post(
 
 
 
-   Cancelled is permanent.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Cancelled is permanent.
+
+
+
+
+
+
+
+
 
 
 
@@ -1540,6 +1721,7 @@ app.post(
       const orderId = String(req.params.orderId || "");
 
       const cancelPassword = String(req.body?.cancelPassword || ""); // Admin users can cancel directly from Admin Received.
+
       // Public users must provide the separate cancellation password.
 
       const header = String(req.headers.authorization || "");
@@ -1589,7 +1771,7 @@ app.post(
 
         const row = normalizeRow(rows[index]);
 
-        if (row.Status === "Cancelled") {
+        if (rowStatus === "Cancelled") {
           throw Object.assign(
             new Error("This registration is already cancelled."),
 
@@ -1599,7 +1781,7 @@ app.post(
           );
         }
 
-        row.Status = "Cancelled";
+        rowStatus = "Cancelled";
 
         row["Cancelled At"] = new Date().toLocaleString("en-IN");
 
@@ -1635,7 +1817,23 @@ app.post(
 
 
 
-   ADMIN LOGIN
+
+
+
+
+
+
+
+
+   ADMIN LOGIN
+
+
+
+
+
+
+
+
 
 
 
@@ -1695,7 +1893,23 @@ app.post(
 
 
 
-   ADMIN RECEIVED DASHBOARD
+
+
+
+
+
+
+
+
+   ADMIN RECEIVED DASHBOARD
+
+
+
+
+
+
+
+
 
 
 
@@ -1807,7 +2021,23 @@ app.get(
 
 
 
-   ADMIN NOTES
+
+
+
+
+
+
+
+
+   ADMIN NOTES
+
+
+
+
+
+
+
+
 
 
 
@@ -1879,7 +2109,23 @@ app.post(
 
 
 
-   ADMIN-ONLY EXCEL DOWNLOAD
+
+
+
+
+
+
+
+
+   ADMIN-ONLY EXCEL DOWNLOAD
+
+
+
+
+
+
+
+
 
 
 
@@ -1908,7 +2154,7 @@ app.get(
     res.download(
       FILE_PATH,
 
-      "svara-token-registrations.xlsx",
+      "spya-token-registrations.xlsx",
 
       (err) => {
         if (err) {
@@ -1931,7 +2177,23 @@ app.get(
 
 
 
-   ADMIN-ONLY CLEAR
+
+
+
+
+
+
+
+
+   ADMIN-ONLY CLEAR
+
+
+
+
+
+
+
+
 
 
 
@@ -1975,7 +2237,23 @@ app.post(
 
 
 
-   TEST
+
+
+
+
+
+
+
+
+   TEST
+
+
+
+
+
+
+
+
 
 
 
@@ -1992,7 +2270,7 @@ app.get(
     res.json({
       ok: true,
 
-      message: "SVARA server is running.",
+      message: "SPYA server is running.",
     }),
 );
 
@@ -2004,7 +2282,23 @@ app.get(
 
 
 
-   START SERVER
+
+
+
+
+
+
+
+
+   START SERVER
+
+
+
+
+
+
+
+
 
 
 
@@ -2015,27 +2309,36 @@ app.get(
 \========================================================= */
 
 /* =========================================================
-   SVARA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
+
+   SPYA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
+
    These routes are the V5 source-of-truth APIs.
+
    Legacy Excel routes below remain unchanged.
-========================================================= */
+
+\========================================================= */
 
 function getV5Bearer(req) {
   const header = String(req.headers.authorization || "");
+
   return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
 function requireV5UserRoute(req, res, next) {
   const payload = verifyV5Token(getV5Bearer(req));
+
   if (!payload || payload.type !== "user" || !payload.sub) {
     return res.status(401).json({ error: "V5 user authentication required." });
   }
+
   req.v5UserId = payload.sub;
+
   next();
 }
 
 function requireV5AdminRoute(req, res, next) {
   const payload = verifyV5Token(getV5Bearer(req));
+
   if (
     !payload ||
     payload.type !== "admin" ||
@@ -2044,27 +2347,37 @@ function requireV5AdminRoute(req, res, next) {
   ) {
     return res.status(401).json({ error: "V5 admin authentication required." });
   }
+
   req.v5AdminUserId = payload.sub;
+
   req.v5AdminId = payload.adminId;
+
   next();
 }
 
 function positiveInteger(value, fieldName, max = 9999) {
   const n = Number(value);
+
   if (!Number.isInteger(n) || n < 1 || n > max) {
     throw Object.assign(
       new Error(`${fieldName} must be a whole number between 1 and ${max}.`),
+
       { statusCode: 400 },
     );
   }
+
   return n;
 }
 
 function normalizeV5RegistrationInput(body = {}) {
   const categoryId = String(body.categoryId || "").trim();
+
   const name = String(body.name || body.customerName || "").trim();
+
   const email = String(body.email || body.customerEmail || "").trim();
+
   const phone = String(body.phone || body.customerPhone || "").trim();
+
   const payment = String(body.payment || body.paymentMode || "").trim();
 
   if (!categoryId) {
@@ -2072,16 +2385,19 @@ function normalizeV5RegistrationInput(body = {}) {
       statusCode: 400,
     });
   }
+
   if (!name) {
     throw Object.assign(new Error("Customer name is required."), {
       statusCode: 400,
     });
   }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+
+  if (email && !/^[^\s@]+@[^\s@]+\[^\s@]+$/.test(email)) {
     throw Object.assign(new Error("Enter a valid email address."), {
       statusCode: 400,
     });
   }
+
   if (phone && !/^\+?[\d\s\-()]{7,15}$/.test(phone)) {
     throw Object.assign(new Error("Enter a valid phone number."), {
       statusCode: 400,
@@ -2090,10 +2406,15 @@ function normalizeV5RegistrationInput(body = {}) {
 
   return {
     categoryId,
+
     quantity: positiveInteger(body.quantity, "Quantity"),
+
     name,
+
     email,
+
     phone,
+
     payment,
   };
 }
@@ -2102,11 +2423,17 @@ async function getOwnedDashboard(db, dashboardId, userId) {
   return (
     await db.query(
       `SELECT *
+
          FROM dashboards
+
         WHERE id=$1
+
           AND user_id=$2
+
           AND archived_at IS NULL
+
         LIMIT 1`,
+
       [dashboardId, userId],
     )
   ).rows[0];
@@ -2116,37 +2443,57 @@ async function getOwnedCategory(db, dashboardId, categoryId) {
   return (
     await db.query(
       `SELECT id,dashboard_id,name,prefix,price,active
+
          FROM token_categories
+
         WHERE id=$1
+
           AND dashboard_id=$2
+
         LIMIT 1`,
+
       [categoryId, dashboardId],
     )
   ).rows[0];
 }
 
 /*
+
  * Returns the smallest contiguous range of available serial numbers.
+
  * Only tokens whose status is Allocated are considered occupied.
+
  * Cancelled tokens therefore become reusable.
+
  */
+
 async function findV5AvailableSerials(
   client,
+
   dashboardId,
+
   categoryId,
+
   quantity,
 ) {
   const result = await client.query(
     `SELECT serial
+
        FROM tokens
+
       WHERE dashboard_id=$1
+
         AND category_id=$2
+
         AND status='Allocated'
+
       ORDER BY serial`,
+
     [dashboardId, categoryId],
   );
 
   const used = new Set(result.rows.map((r) => Number(r.serial)));
+
   let candidate = 1;
 
   while (true) {
@@ -2155,29 +2502,35 @@ async function findV5AvailableSerials(
     for (let i = 0; i < quantity; i += 1) {
       if (used.has(candidate + i)) {
         available = false;
+
         break;
       }
     }
 
     if (available) return candidate;
+
     candidate += 1;
   }
 }
 
 async function createV5Registration({ dashboardId, userId, input }) {
   const db = requirePg();
+
   const client = await db.connect();
 
   try {
     await client.query("BEGIN");
 
     // Serialize allocations per dashboard so two simultaneous requests
+
     // cannot receive the same order number or token range.
+
     await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-      `SVARA-V5-DASHBOARD:${dashboardId}`,
+      `SPYA-V5-DASHBOARD:${dashboardId}`,
     ]);
 
     const dashboard = await getOwnedDashboard(client, dashboardId, userId);
+
     if (!dashboard) {
       throw Object.assign(new Error("Dashboard not found."), {
         statusCode: 404,
@@ -2186,9 +2539,12 @@ async function createV5Registration({ dashboardId, userId, input }) {
 
     const category = await getOwnedCategory(
       client,
+
       dashboardId,
+
       input.categoryId,
     );
+
     if (!category || !category.active) {
       throw Object.assign(new Error("Token category not found or inactive."), {
         statusCode: 404,
@@ -2197,40 +2553,66 @@ async function createV5Registration({ dashboardId, userId, input }) {
 
     const nextOrderResult = await client.query(
       `SELECT COALESCE(MAX(order_number),0)+1 AS next_order
+
          FROM registrations
+
         WHERE dashboard_id=$1`,
+
       [dashboardId],
     );
+
     const orderNumber = Number(nextOrderResult.rows[0].next_order);
 
     const quantity = input.quantity;
+
     const tokenStart = await findV5AvailableSerials(
       client,
+
       dashboardId,
+
       category.id,
+
       quantity,
     );
+
     const tokenEnd = tokenStart + quantity - 1;
+
     const amount = Number(category.price) * quantity;
 
     const registrationResult = await client.query(
       `INSERT INTO registrations
+
         (dashboard_id,category_id,order_number,customer_name,customer_email,
+
          customer_phone,quantity,token_start,token_end,amount,payment_mode,status)
+
        VALUES
+
         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Complete')
+
        RETURNING *`,
+
       [
         dashboardId,
+
         category.id,
+
         orderNumber,
+
         input.name,
+
         input.email || null,
+
         input.phone || null,
+
         quantity,
+
         tokenStart,
+
         tokenEnd,
+
         amount,
+
         input.payment || null,
       ],
     );
@@ -2238,15 +2620,22 @@ async function createV5Registration({ dashboardId, userId, input }) {
     const registration = registrationResult.rows[0];
 
     // Reuse cancelled token rows where possible; otherwise create new rows.
+
     for (let serial = tokenStart; serial <= tokenEnd; serial += 1) {
       const existing = (
         await client.query(
           `SELECT id
+
              FROM tokens
+
             WHERE dashboard_id=$1
+
               AND category_id=$2
+
               AND serial=$3
+
             LIMIT 1`,
+
           [dashboardId, category.id, serial],
         )
       ).rows[0];
@@ -2254,17 +2643,25 @@ async function createV5Registration({ dashboardId, userId, input }) {
       if (existing) {
         await client.query(
           `UPDATE tokens
+
               SET registration_id=$1,
+
                   status='Allocated',
+
                   created_at=NOW()
+
             WHERE id=$2`,
+
           [registration.id, existing.id],
         );
       } else {
         await client.query(
           `INSERT INTO tokens
+
             (dashboard_id,category_id,serial,registration_id,status)
+
            VALUES ($1,$2,$3,$4,'Allocated')`,
+
           [dashboardId, category.id, serial, registration.id],
         );
       }
@@ -2274,33 +2671,56 @@ async function createV5Registration({ dashboardId, userId, input }) {
 
     return {
       id: registration.id,
+
       orderId: `ORD${String(orderNumber).padStart(4, "0")}`,
+
       orderNumber,
+
       dashboardId,
+
       categoryId: category.id,
+
       tokenType: category.name,
+
       categoryName: category.name,
+
       prefix: category.prefix,
+
       quantity,
+
       tokenStart: `${category.prefix}${String(tokenStart).padStart(4, "0")}`,
+
       tokenEnd: `${category.prefix}${String(tokenEnd).padStart(4, "0")}`,
+
       name: registration.customer_name,
+
       email: registration.customer_email || "",
+
       phone: registration.customer_phone || "",
+
       payment: registration.payment_mode || "",
+
       amount: Number(registration.amount),
+
       status: registration.status,
+
       cancelledAt: registration.cancelled_at,
+
       adminNotes: registration.admin_notes || "",
+
       date: new Date(registration.created_at).toLocaleDateString("en-IN"),
+
       time: new Date(registration.created_at).toLocaleTimeString("en-IN", {
         hour: "2-digit",
+
         minute: "2-digit",
       }),
+
       createdAt: registration.created_at,
     };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
+
     throw error;
   } finally {
     client.release();
@@ -2311,55 +2731,90 @@ async function mapV5Registration(db, row) {
   const category = (
     await db.query(
       `SELECT name,prefix
+
          FROM token_categories
+
         WHERE id=$1
+
         LIMIT 1`,
-      [row.category_id],
+
+      [rowcategory_id],
     )
   ).rows[0];
 
   const prefix = category?.prefix || "";
+
   return {
-    id: row.id,
-    orderId: `ORD${String(row.order_number).padStart(4, "0")}`,
-    orderNumber: Number(row.order_number),
-    dashboardId: row.dashboard_id,
-    categoryId: row.category_id,
+    id: rowid,
+
+    orderId: `ORD${String(roworder_number).padStart(4, "0")}`,
+
+    orderNumber: Number(roworder_number),
+
+    dashboardId: rowdashboard_id,
+
+    categoryId: rowcategory_id,
+
     tokenType: category?.name || "",
+
     categoryName: category?.name || "",
+
     prefix,
-    quantity: Number(row.quantity),
-    tokenStart: `${prefix}${String(row.token_start).padStart(4, "0")}`,
-    tokenEnd: `${prefix}${String(row.token_end).padStart(4, "0")}`,
-    name: row.customer_name,
-    email: row.customer_email || "",
-    phone: row.customer_phone || "",
-    payment: row.payment_mode || "",
-    amount: Number(row.amount),
-    status: row.status,
-    cancelledAt: row.cancelled_at,
-    adminNotes: row.admin_notes || "",
-    date: new Date(row.created_at).toLocaleDateString("en-IN"),
-    time: new Date(row.created_at).toLocaleTimeString("en-IN", {
+
+    quantity: Number(rowquantity),
+
+    tokenStart: `${prefix}${String(rowtoken_start).padStart(4, "0")}`,
+
+    tokenEnd: `${prefix}${String(rowtoken_end).padStart(4, "0")}`,
+
+    name: rowcustomer_name,
+
+    email: rowcustomer_email || "",
+
+    phone: rowcustomer_phone || "",
+
+    payment: rowpayment_mode || "",
+
+    amount: Number(rowamount),
+
+    status: rowstatus,
+
+    cancelledAt: rowcancelled_at,
+
+    adminNotes: rowadmin_notes || "",
+
+    date: new Date(rowcreated_at).toLocaleDateString("en-IN"),
+
+    time: new Date(rowcreated_at).toLocaleTimeString("en-IN", {
       hour: "2-digit",
+
       minute: "2-digit",
     }),
-    createdAt: row.created_at,
+
+    createdAt: rowcreated_at,
   };
 }
 
 /* ---------------------------------------------------------
+
    GET DASHBOARD DETAILS + CATEGORIES
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.get(
   "/api/v5/token/dashboards/:dashboardId",
+
   requireV5UserRoute,
+
   async (req, res) => {
     try {
       const db = requirePg();
+
       const dashboard = await getOwnedDashboard(
         db,
+
         req.params.dashboardId,
+
         req.v5UserId,
       );
 
@@ -2370,9 +2825,13 @@ app.get(
       const categories = (
         await db.query(
           `SELECT id,name,prefix,price,active,created_at,updated_at
+
              FROM token_categories
+
             WHERE dashboard_id=$1
+
             ORDER BY created_at`,
+
           [dashboard.id],
         )
       ).rows;
@@ -2380,6 +2839,7 @@ app.get(
       res.json({ success: true, dashboard, categories });
     } catch (error) {
       console.error("V5 dashboard details error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to load dashboard.",
       });
@@ -2388,17 +2848,25 @@ app.get(
 );
 
 /* ---------------------------------------------------------
+
    GET USER REGISTRATIONS
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.get(
   "/api/v5/dashboards/:dashboardId/registrations",
+
   requireV5UserRoute,
+
   async (req, res) => {
     try {
       const db = requirePg();
+
       const dashboard = await getOwnedDashboard(
         db,
+
         req.params.dashboardId,
+
         req.v5UserId,
       );
 
@@ -2409,14 +2877,19 @@ app.get(
       const rows = (
         await db.query(
           `SELECT *
+
              FROM registrations
+
             WHERE dashboard_id=$1
+
             ORDER BY created_at DESC`,
+
           [dashboard.id],
         )
       ).rows;
 
       const entries = [];
+
       for (const row of rows) {
         entries.push(await mapV5Registration(db, row));
       }
@@ -2424,6 +2897,7 @@ app.get(
       res.json({ success: true, entries });
     } catch (error) {
       console.error("V5 registrations list error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to load registrations.",
       });
@@ -2432,24 +2906,32 @@ app.get(
 );
 
 /* ---------------------------------------------------------
+
    CREATE USER REGISTRATION
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations",
+
   requireV5UserRoute,
+
   async (req, res) => {
     try {
       const input = normalizeV5RegistrationInput(req.body || {});
 
       const entry = await createV5Registration({
         dashboardId: req.params.dashboardId,
+
         userId: req.v5UserId,
+
         input,
       });
 
       res.status(201).json({ success: true, entry });
     } catch (error) {
       console.error("V5 create registration error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to create registration.",
       });
@@ -2458,13 +2940,20 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    UPDATE STATUS
+
    Complete <-> Payment Not Received
+
    Cancelled is permanent.
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/status",
+
   requireV5UserRoute,
+
   async (req, res) => {
     try {
       const requested = String(req.body?.status || "").trim();
@@ -2476,9 +2965,12 @@ app.post(
       }
 
       const db = requirePg();
+
       const dashboard = await getOwnedDashboard(
         db,
+
         req.params.dashboardId,
+
         req.v5UserId,
       );
 
@@ -2488,11 +2980,17 @@ app.post(
 
       const result = await db.query(
         `UPDATE registrations
+
             SET status=$1
+
           WHERE id=$2
+
             AND dashboard_id=$3
+
             AND status <> 'Cancelled'
+
         RETURNING *`,
+
         [requested, req.params.registrationId, dashboard.id],
       );
 
@@ -2504,10 +3002,12 @@ app.post(
 
       res.json({
         success: true,
+
         entry: await mapV5Registration(db, result.rows[0]),
       });
     } catch (error) {
       console.error("V5 status update error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to update status.",
       });
@@ -2516,52 +3016,69 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    CANCEL REGISTRATION
+
    Cancellation makes its token numbers reusable.
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/cancel",
+
   requireV5UserRoute,
+
   async (req, res) => {
     const db = requirePg();
+
     const client = await db.connect();
 
     try {
       await client.query("BEGIN");
 
       await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `SVARA-V5-DASHBOARD:${req.params.dashboardId}`,
+        `SPYA-V5-DASHBOARD:${req.params.dashboardId}`,
       ]);
 
       const dashboard = await getOwnedDashboard(
         client,
+
         req.params.dashboardId,
+
         req.v5UserId,
       );
 
       if (!dashboard) {
         await client.query("ROLLBACK");
+
         return res.status(404).json({ error: "Dashboard not found." });
       }
 
       const registration = (
         await client.query(
           `SELECT *
+
              FROM registrations
+
             WHERE id=$1
+
               AND dashboard_id=$2
+
             LIMIT 1`,
+
           [req.params.registrationId, dashboard.id],
         )
       ).rows[0];
 
       if (!registration) {
         await client.query("ROLLBACK");
+
         return res.status(404).json({ error: "Registration not found." });
       }
 
       if (registration.status === "Cancelled") {
         await client.query("ROLLBACK");
+
         return res.status(400).json({
           error: "This registration is already cancelled.",
         });
@@ -2570,18 +3087,26 @@ app.post(
       const updated = (
         await client.query(
           `UPDATE registrations
+
               SET status='Cancelled',
+
                   cancelled_at=NOW()
+
             WHERE id=$1
+
             RETURNING *`,
+
           [registration.id],
         )
       ).rows[0];
 
       await client.query(
         `UPDATE tokens
+
             SET status='Cancelled'
+
           WHERE registration_id=$1`,
+
         [registration.id],
       );
 
@@ -2589,12 +3114,16 @@ app.post(
 
       res.json({
         success: true,
+
         message: "Registration cancelled. Its token numbers are now reusable.",
+
         entry: await mapV5Registration(db, updated),
       });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
+
       console.error("V5 cancellation error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to cancel registration.",
       });
@@ -2605,11 +3134,16 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    ADMIN REGISTRATIONS
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.get(
   "/api/v5/admin/dashboards/:dashboardId/registrations",
+
   requireV5AdminRoute,
+
   async (req, res) => {
     try {
       const db = requirePg();
@@ -2617,11 +3151,17 @@ app.get(
       const dashboard = (
         await db.query(
           `SELECT *
+
              FROM dashboards
+
             WHERE id=$1
+
               AND user_id=$2
+
               AND archived_at IS NULL
+
             LIMIT 1`,
+
           [req.params.dashboardId, req.v5AdminUserId],
         )
       ).rows[0];
@@ -2633,43 +3173,66 @@ app.get(
       const rows = (
         await db.query(
           `SELECT *
+
              FROM registrations
+
             WHERE dashboard_id=$1
+
             ORDER BY created_at DESC`,
+
           [dashboard.id],
         )
       ).rows;
 
       const entries = [];
+
       for (const row of rows) {
         entries.push(await mapV5Registration(db, row));
       }
 
       const summary = {
         totalOrders: entries.length,
+
         totalTokens: entries.reduce((sum, e) => sum + e.quantity, 0),
+
         completedOrders: entries.filter((e) => e.status === "Complete").length,
+
         completedTokens: entries
+
           .filter((e) => e.status === "Complete")
+
           .reduce((sum, e) => sum + e.quantity, 0),
+
         paymentNotReceivedOrders: entries.filter(
           (e) => e.status === "Payment Not Received",
         ).length,
+
         paymentNotReceivedTokens: entries
+
           .filter((e) => e.status === "Payment Not Received")
+
           .reduce((sum, e) => sum + e.quantity, 0),
+
         cancelledOrders: entries.filter((e) => e.status === "Cancelled").length,
+
         cancelledTokens: entries
+
           .filter((e) => e.status === "Cancelled")
+
           .reduce((sum, e) => sum + e.quantity, 0),
+
         totalAmountReceived: entries
+
           .filter((e) => e.status === "Complete")
+
           .reduce((sum, e) => sum + e.amount, 0),
+
         amountReceivedByCategory: {},
       };
 
       for (const entry of entries) {
         if (entry.status !== "Complete") continue;
+
         summary.amountReceivedByCategory[entry.categoryName] =
           (summary.amountReceivedByCategory[entry.categoryName] || 0) +
           entry.amount;
@@ -2677,12 +3240,16 @@ app.get(
 
       res.json({
         success: true,
+
         dashboard,
+
         summary,
+
         entries,
       });
     } catch (error) {
       console.error("V5 admin registrations error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to load admin registrations.",
       });
@@ -2691,11 +3258,16 @@ app.get(
 );
 
 /* ---------------------------------------------------------
+
    ADMIN STATUS
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/status",
+
   requireV5AdminRoute,
+
   async (req, res) => {
     try {
       const requested = String(req.body?.status || "").trim();
@@ -2710,19 +3282,32 @@ app.post(
 
       const result = await db.query(
         `UPDATE registrations r
+
             SET status=$1
+
            FROM dashboards d
+
           WHERE r.id=$2
+
             AND r.dashboard_id=$3
+
             AND d.id=r.dashboard_id
+
             AND d.user_id=$4
+
             AND d.archived_at IS NULL
+
             AND r.status <> 'Cancelled'
+
         RETURNING r.*`,
+
         [
           requested,
+
           req.params.registrationId,
+
           req.params.dashboardId,
+
           req.v5AdminUserId,
         ],
       );
@@ -2735,10 +3320,12 @@ app.post(
 
       res.json({
         success: true,
+
         entry: await mapV5Registration(db, result.rows[0]),
       });
     } catch (error) {
       console.error("V5 admin status error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to update status.",
       });
@@ -2747,35 +3334,51 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    ADMIN CANCEL
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/cancel",
+
   requireV5AdminRoute,
+
   async (req, res) => {
     const db = requirePg();
+
     const client = await db.connect();
 
     try {
       await client.query("BEGIN");
 
       await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `SVARA-V5-DASHBOARD:${req.params.dashboardId}`,
+        `SPYA-V5-DASHBOARD:${req.params.dashboardId}`,
       ]);
 
       const registration = (
         await client.query(
           `SELECT r.*
+
              FROM registrations r
+
              JOIN dashboards d ON d.id=r.dashboard_id
+
             WHERE r.id=$1
+
               AND r.dashboard_id=$2
+
               AND d.user_id=$3
+
               AND d.archived_at IS NULL
+
             LIMIT 1`,
+
           [
             req.params.registrationId,
+
             req.params.dashboardId,
+
             req.v5AdminUserId,
           ],
         )
@@ -2783,11 +3386,13 @@ app.post(
 
       if (!registration) {
         await client.query("ROLLBACK");
+
         return res.status(404).json({ error: "Registration not found." });
       }
 
       if (registration.status === "Cancelled") {
         await client.query("ROLLBACK");
+
         return res.status(400).json({
           error: "This registration is already cancelled.",
         });
@@ -2796,18 +3401,26 @@ app.post(
       const updated = (
         await client.query(
           `UPDATE registrations
+
               SET status='Cancelled',
+
                   cancelled_at=NOW()
+
             WHERE id=$1
+
             RETURNING *`,
+
           [registration.id],
         )
       ).rows[0];
 
       await client.query(
         `UPDATE tokens
+
             SET status='Cancelled'
+
           WHERE registration_id=$1`,
+
         [registration.id],
       );
 
@@ -2815,12 +3428,16 @@ app.post(
 
       res.json({
         success: true,
+
         message: "Registration cancelled. Its token numbers are now reusable.",
+
         entry: await mapV5Registration(db, updated),
       });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
+
       console.error("V5 admin cancellation error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to cancel registration.",
       });
@@ -2831,30 +3448,48 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    ADMIN NOTES
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.post(
   "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/notes",
+
   requireV5AdminRoute,
+
   async (req, res) => {
     try {
       const db = requirePg();
+
       const notes = String(req.body?.notes || "").trim();
 
       const result = await db.query(
         `UPDATE registrations r
+
             SET admin_notes=$1
+
            FROM dashboards d
+
           WHERE r.id=$2
+
             AND r.dashboard_id=$3
+
             AND d.id=r.dashboard_id
+
             AND d.user_id=$4
+
             AND d.archived_at IS NULL
+
         RETURNING r.*`,
+
         [
           notes,
+
           req.params.registrationId,
+
           req.params.dashboardId,
+
           req.v5AdminUserId,
         ],
       );
@@ -2865,10 +3500,12 @@ app.post(
 
       res.json({
         success: true,
+
         entry: await mapV5Registration(db, result.rows[0]),
       });
     } catch (error) {
       console.error("V5 admin notes error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to save admin notes.",
       });
@@ -2877,13 +3514,20 @@ app.post(
 );
 
 /* ---------------------------------------------------------
+
    ADMIN EXCEL EXPORT
+
    PostgreSQL remains the source of truth.
+
    Excel is only an export.
---------------------------------------------------------- */
+
+\--------------------------------------------------------- */
+
 app.get(
   "/api/v5/admin/dashboards/:dashboardId/export-excel",
+
   requireV5AdminRoute,
+
   async (req, res) => {
     try {
       const db = requirePg();
@@ -2891,11 +3535,17 @@ app.get(
       const dashboard = (
         await db.query(
           `SELECT id,association_name
+
              FROM dashboards
+
             WHERE id=$1
+
               AND user_id=$2
+
               AND archived_at IS NULL
+
             LIMIT 1`,
+
           [req.params.dashboardId, req.v5AdminUserId],
         )
       ).rows[0];
@@ -2907,94 +3557,154 @@ app.get(
       const rows = (
         await db.query(
           `SELECT
+
              r.order_number,
+
              c.name AS category_name,
+
              c.prefix,
+
              r.quantity,
+
              r.token_start,
+
              r.token_end,
+
              r.customer_name,
+
              r.customer_email,
+
              r.customer_phone,
+
              r.payment_mode,
+
              r.amount,
+
              r.status,
+
              r.cancelled_at,
+
              r.admin_notes,
+
              r.created_at
+
            FROM registrations r
+
            JOIN token_categories c ON c.id=r.category_id
+
           WHERE r.dashboard_id=$1
+
           ORDER BY r.created_at DESC`,
+
           [dashboard.id],
         )
       ).rows;
 
       const exportRows = rows.map((r) => ({
         "Order ID": `ORD${String(r.order_number).padStart(4, "0")}`,
+
         "Token Type": r.category_name,
+
         Prefix: r.prefix,
+
         Quantity: Number(r.quantity),
+
         "Token Start": `${r.prefix}${String(r.token_start).padStart(4, "0")}`,
+
         "Token End": `${r.prefix}${String(r.token_end).padStart(4, "0")}`,
+
         Name: r.customer_name,
+
         Email: r.customer_email || "",
+
         Phone: r.customer_phone || "",
+
         "Payment Mode": r.payment_mode || "",
+
         Amount: Number(r.amount),
+
         Status: r.status,
+
         "Cancelled At": r.cancelled_at || "",
+
         "Admin Notes": r.admin_notes || "",
+
         Date: new Date(r.created_at).toLocaleDateString("en-IN"),
+
         Time: new Date(r.created_at).toLocaleTimeString("en-IN", {
           hour: "2-digit",
+
           minute: "2-digit",
         }),
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(exportRows);
+
       worksheet["!cols"] = [
         { wch: 14 },
+
         { wch: 20 },
+
         { wch: 10 },
+
         { wch: 10 },
+
         { wch: 15 },
+
         { wch: 15 },
+
         { wch: 24 },
+
         { wch: 30 },
+
         { wch: 18 },
+
         { wch: 18 },
+
         { wch: 14 },
+
         { wch: 24 },
+
         { wch: 24 },
+
         { wch: 35 },
+
         { wch: 14 },
+
         { wch: 12 },
       ];
 
       const workbook = XLSX.utils.book_new();
+
       XLSX.utils.book_append_sheet(workbook, worksheet, "Registrations");
 
       const buffer = XLSX.write(workbook, {
         type: "buffer",
+
         bookType: "xlsx",
       });
 
-      const safeName = String(dashboard.association_name || "SVARA")
+      const safeName = String(dashboard.association_name || "SPYA")
         .replace(/[^a-zA-Z0-9_-]+/g, "_")
+
         .slice(0, 60);
 
       res.setHeader(
         "Content-Type",
+
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       );
+
       res.setHeader(
         "Content-Disposition",
+
         `attachment; filename="${safeName}-registrations.xlsx"`,
       );
+
       res.send(buffer);
     } catch (error) {
       console.error("V5 Excel export error:", error);
+
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to export Excel.",
       });
@@ -3012,7 +3722,7 @@ app.listen(
   () => {
     console.log("==============================================");
 
-    console.log("SVARA V5 Token Server is running (V4 Excel routes retained)");
+    console.log("SPYA V5 Token Server is running (V4 Excel routes retained)");
 
     console.log(`Port: ${PORT}`);
 

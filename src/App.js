@@ -57,16 +57,16 @@ html, body, #root { margin:0; min-height:100%; width:100%; }
 body { overflow-x:hidden; }
 button,input,select,textarea { font:inherit; max-width:100%; }
 @media(max-width:768px) {
-  .svara-container { width:100%!important; padding:12px!important; }
-  .svara-grid-2 { grid-template-columns:1fr!important; }
-  .svara-grid-3 { grid-template-columns:1fr!important; }
-  .svara-grid-4 { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
-  .svara-table-wrap { overflow-x:auto!important; }
-  .svara-table { min-width:950px; }
+  .spya-container { width:100%!important; padding:12px!important; }
+  .spya-grid-2 { grid-template-columns:1fr!important; }
+  .spya-grid-3 { grid-template-columns:1fr!important; }
+  .spya-grid-4 { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+  .spya-table-wrap { overflow-x:auto!important; }
+  .spya-table { min-width:950px; }
 }
 @media(max-width:480px) {
-  .svara-grid-4 { grid-template-columns:1fr!important; }
-  .svara-actions { flex-direction:column!important; }
+  .spya-grid-4 { grid-template-columns:1fr!important; }
+  .spya-actions { flex-direction:column!important; }
 }
 `;
 
@@ -109,17 +109,17 @@ function getAdminToken() {
   return sessionStorage.getItem(ADMIN_TOKEN_KEY) || "";
 }
 
-async function requestOtp(email) {
-  return api("/api/v5/auth/request-otp", {
+async function registerUser(username, password) {
+  return api("/api/v5/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ username, password }),
   });
 }
 
-async function verifyOtp(email, otp) {
-  return api("/api/v5/auth/verify-otp", {
+async function loginUser(username, password) {
+  return api("/api/v5/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, otp }),
+    body: JSON.stringify({ username, password }),
   });
 }
 
@@ -261,7 +261,7 @@ function downloadAdminExcel(dashboardId) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "svara-token-registrations.xlsx";
+      link.download = "spya-token-registrations.xlsx";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -379,50 +379,64 @@ function ErrorText({ children }) {
 }
 
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("email");
+  const [mode, setMode] = useState("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  async function sendOtp() {
-    const value = email.trim();
-    if (!value) {
-      setError("Enter your email address.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-      setMessage("");
-      await requestOtp(value);
-      setStep("otp");
-      setMessage(`OTP sent to ${value}.`);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  function validateUsername(value) {
+    return /^[a-z0-9][a-z0-9_.-]{3,39}$/.test(value.trim().toLowerCase());
   }
 
-  async function verify() {
-    if (!/^\d{6}$/.test(otp.trim())) {
-      setError("Enter the 6-digit OTP.");
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setUsername("");
+    setPassword("");
+    setConfirmPassword("");
+    setError("");
+    setMessage("");
+  }
+
+  async function submit() {
+    const userId = username.trim().toLowerCase();
+
+    setError("");
+    setMessage("");
+
+    if (!validateUsername(userId)) {
+      setError(
+        "User ID must be 4-40 characters and use only letters, numbers, dot, underscore or hyphen.",
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (mode === "register" && password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
 
     try {
       setLoading(true);
-      setError("");
-      const result = await verifyOtp(email.trim(), otp.trim());
+
+      const result =
+        mode === "register"
+          ? await registerUser(userId, password)
+          : await loginUser(userId, password);
 
       sessionStorage.setItem(USER_TOKEN_KEY, result.token);
+      setMessage(
+        mode === "register"
+          ? "Account created successfully."
+          : "Login successful.",
+      );
       onLogin(result);
     } catch (e) {
       setError(e.message);
@@ -443,7 +457,7 @@ function LoginScreen({ onLogin }) {
         }}
       >
         <div style={{ ...styles.card, width: "min(440px,100%)", padding: 32 }}>
-          <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div
               style={{
                 width: 58,
@@ -461,106 +475,129 @@ function LoginScreen({ onLogin }) {
             >
               S
             </div>
+
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
               SPYA
             </div>
+
             <h1 style={{ margin: "8px 0 5px", fontSize: 27 }}>
-              {step === "email" ? "Welcome back" : "Verify OTP"}
+              {mode === "login" ? "Welcome back" : "Create your account"}
             </h1>
+
             <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-              {step === "email"
-                ? "Sign in with your email address."
-                : `Enter the OTP sent to ${email}.`}
+              {mode === "login"
+                ? "Sign in with your User ID and password."
+                : "Create a User ID and password to start using SPYA."}
             </p>
           </div>
 
-          {step === "email" ? (
-            <>
-              <Field label="Email">
-                <input
-                  autoFocus
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  style={styles.input}
-                  onKeyDown={(e) => e.key === "Enter" && sendOtp()}
-                />
-              </Field>
+          <Field label="User ID">
+            <input
+              autoFocus
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) =>
+                setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))
+              }
+              placeholder="e.g. rahul123"
+              maxLength={40}
+              style={styles.input}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+            />
+          </Field>
 
-              <button
-                onClick={sendOtp}
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  width: "100%",
-                  background: "#111827",
-                  color: "#fff",
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                {loading ? "Sending..." : "Send OTP"}
-              </button>
-            </>
-          ) : (
-            <>
-              <Field label="6-digit OTP">
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) =>
-                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
-                  }
-                  style={{
-                    ...styles.input,
-                    textAlign: "center",
-                    letterSpacing: 6,
-                    fontSize: 20,
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && verify()}
-                />
-              </Field>
+          <Field label="Password">
+            <input
+              type="password"
+              autoComplete={
+                mode === "login" ? "current-password" : "new-password"
+              }
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Minimum 8 characters"
+              maxLength={128}
+              style={styles.input}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+            />
+          </Field>
 
-              <button
-                onClick={verify}
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  width: "100%",
-                  background: "#111827",
-                  color: "#fff",
-                }}
-              >
-                {loading ? "Verifying..." : "Verify & Continue"}
-              </button>
-
-              <button
-                onClick={() => {
-                  setStep("email");
-                  setOtp("");
-                  setError("");
-                  setMessage("");
-                }}
-                style={{
-                  ...styles.button,
-                  width: "100%",
-                  background: "transparent",
-                  color: "#64748b",
-                  marginTop: 8,
-                }}
-              >
-                ← Change email
-              </button>
-            </>
+          {mode === "register" && (
+            <Field label="Confirm Password">
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter your password"
+                maxLength={128}
+                style={styles.input}
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+              />
+            </Field>
           )}
 
+          <button
+            onClick={submit}
+            disabled={loading}
+            style={{
+              ...styles.button,
+              width: "100%",
+              background: "#111827",
+              color: "#fff",
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading
+              ? mode === "login"
+                ? "Signing in..."
+                : "Creating account..."
+              : mode === "login"
+                ? "Sign In"
+                : "Create Account"}
+          </button>
+
+          <div
+            style={{
+              marginTop: 18,
+              textAlign: "center",
+              color: "#64748b",
+              fontSize: 13,
+            }}
+          >
+            {mode === "login"
+              ? "Don't have an account?"
+              : "Already have an account?"}
+            <button
+              type="button"
+              onClick={() =>
+                switchMode(mode === "login" ? "register" : "login")
+              }
+              style={{
+                ...styles.button,
+                padding: 0,
+                marginLeft: 6,
+                background: "transparent",
+                color: "#4c1d95",
+              }}
+            >
+              {mode === "login" ? "Create one" : "Sign in"}
+            </button>
+          </div>
+
           {message && (
-            <div style={{ color: "#047857", fontSize: 12, marginTop: 10 }}>
+            <div
+              style={{
+                color: "#047857",
+                fontSize: 12,
+                marginTop: 10,
+                textAlign: "center",
+              }}
+            >
               {message}
             </div>
           )}
+
           {error && <ErrorText>{error}</ErrorText>}
 
           <div
@@ -571,7 +608,7 @@ function LoginScreen({ onLogin }) {
               textAlign: "center",
             }}
           >
-            Your account and dashboards are stored in PostgreSQL.
+            Your account and dashboards are securely stored in PostgreSQL.
           </div>
         </div>
       </div>
@@ -663,7 +700,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
   return (
     <div style={styles.page}>
       <div
-        className="svara-container"
+        className="spya-container"
         style={{ ...styles.container, paddingTop: 25, paddingBottom: 50 }}
       >
         <div style={{ ...styles.card, padding: 28 }}>
@@ -687,7 +724,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
 
           <form onSubmit={submit}>
             <div
-              className="svara-grid-2"
+              className="spya-grid-2"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
@@ -751,7 +788,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
             {categories.map((category, index) => (
               <div
                 key={index}
-                className="svara-grid-3"
+                className="spya-grid-3"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1.4fr .8fr .8fr auto",
@@ -829,7 +866,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
             {error && <ErrorText>{error}</ErrorText>}
 
             <div
-              className="svara-actions"
+              className="spya-actions"
               style={{
                 display: "flex",
                 gap: 10,
@@ -934,7 +971,7 @@ function AdminCredentialsSetup({ onDone, onSkip }) {
       {error && <ErrorText>{error}</ErrorText>}
 
       <div
-        className="svara-actions"
+        className="spya-actions"
         style={{ display: "flex", gap: 10, marginTop: 20 }}
       >
         <button
@@ -1000,7 +1037,7 @@ function DashboardHome({
   return (
     <div style={styles.page}>
       <div
-        className="svara-container"
+        className="spya-container"
         style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
         <div
@@ -1054,7 +1091,7 @@ function DashboardHome({
         </div>
 
         <div
-          className="svara-grid-2"
+          className="spya-grid-2"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(2,minmax(0,1fr))",
@@ -1213,7 +1250,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
   return (
     <div style={styles.page}>
       <div
-        className="svara-container"
+        className="spya-container"
         style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
         <button
@@ -1247,7 +1284,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
 
           <form onSubmit={submit} style={{ marginTop: 25 }}>
             <div
-              className="svara-grid-2"
+              className="spya-grid-2"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
@@ -1459,7 +1496,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
             {error && <ErrorText>{error}</ErrorText>}
 
             <div
-              className="svara-actions"
+              className="spya-actions"
               style={{
                 display: "flex",
                 gap: 10,
@@ -1567,7 +1604,7 @@ function SuccessModal({ entry, associationName, onClose }) {
           </div>
         </div>
 
-        <div className="svara-actions" style={{ display: "flex", gap: 10 }}>
+        <div className="spya-actions" style={{ display: "flex", gap: 10 }}>
           <button
             onClick={() => printLabels(entry, associationName)}
             style={{
@@ -1623,7 +1660,7 @@ function UserDashboard({
   return (
     <div style={styles.page}>
       <div
-        className="svara-container"
+        className="spya-container"
         style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
         <div
@@ -1671,7 +1708,7 @@ function UserDashboard({
         </div>
 
         <div
-          className="svara-grid-4"
+          className="spya-grid-4"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4,minmax(0,1fr))",
@@ -1692,7 +1729,7 @@ function UserDashboard({
 
         <div style={{ ...styles.card, overflow: "hidden" }}>
           <div
-            className="svara-actions"
+            className="spya-actions"
             style={{
               padding: 18,
               display: "flex",
@@ -1759,9 +1796,9 @@ function UserDashboard({
               No registrations found.
             </div>
           ) : (
-            <div className="svara-table-wrap" style={{ overflowX: "auto" }}>
+            <div className="spya-table-wrap" style={{ overflowX: "auto" }}>
               <table
-                className="svara-table"
+                className="spya-table"
                 style={{
                   width: "100%",
                   borderCollapse: "collapse",
@@ -2082,7 +2119,7 @@ function AdminReceived({
   return (
     <div style={styles.page}>
       <div
-        className="svara-container"
+        className="spya-container"
         style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
         <div
@@ -2153,7 +2190,7 @@ function AdminReceived({
         </div>
 
         <div
-          className="svara-grid-4"
+          className="spya-grid-4"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4,minmax(0,1fr))",
@@ -2177,7 +2214,7 @@ function AdminReceived({
         </div>
 
         <div
-          className="svara-grid-3"
+          className="spya-grid-3"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(3,minmax(0,1fr))",
@@ -2200,7 +2237,7 @@ function AdminReceived({
 
         <div style={{ ...styles.card, overflow: "hidden" }}>
           <div
-            className="svara-actions"
+            className="spya-actions"
             style={{
               padding: 18,
               display: "flex",
@@ -2271,9 +2308,9 @@ function AdminReceived({
               No registrations found.
             </div>
           ) : (
-            <div className="svara-table-wrap" style={{ overflowX: "auto" }}>
+            <div className="spya-table-wrap" style={{ overflowX: "auto" }}>
               <table
-                className="svara-table"
+                className="spya-table"
                 style={{
                   width: "100%",
                   minWidth: 1150,
@@ -2436,7 +2473,7 @@ export default function App() {
 
       if (
         !me.adminUsername &&
-        !sessionStorage.getItem("svara_v5_admin_setup_seen")
+        !sessionStorage.getItem("spya_v5_admin_setup_seen")
       ) {
         setShowAdminSetup(true);
       }
@@ -2714,12 +2751,12 @@ export default function App() {
       {showAdminSetup && (
         <AdminCredentialsSetup
           onDone={() => {
-            sessionStorage.setItem("svara_v5_admin_setup_seen", "1");
+            sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
             setShowAdminSetup(false);
             loadAccount();
           }}
           onSkip={() => {
-            sessionStorage.setItem("svara_v5_admin_setup_seen", "1");
+            sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
             setShowAdminSetup(false);
           }}
         />
