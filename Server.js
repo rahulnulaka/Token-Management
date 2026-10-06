@@ -2324,6 +2324,26 @@ function getV5Bearer(req) {
   return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
+function verifyV5Token(token) {
+  try {
+    const [encoded, signature] = String(token || "").split(".");
+    if (!encoded || !signature) return null;
+    const expected = crypto
+      .createHmac("sha256", V5_AUTH_SECRET)
+      .update(encoded)
+      .digest("base64url");
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    const payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    );
+    return payload.exp && Number(payload.exp) > Date.now() ? payload : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function requireV5UserRoute(req, res, next) {
   const payload = verifyV5Token(getV5Bearer(req));
 
