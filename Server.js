@@ -2778,22 +2778,22 @@ async function mapV5Registration(db, row) {
 
         LIMIT 1`,
 
-      [rowcategory_id],
+      [row.category_id],
     )
   ).rows[0];
 
   const prefix = category?.prefix || "";
 
   return {
-    id: rowid,
+    id: row.id,
 
-    orderId: `ORD${String(roworder_number).padStart(4, "0")}`,
+    orderId: `ORD${String(row.order_number).padStart(4, "0")}`,
 
-    orderNumber: Number(roworder_number),
+    orderNumber: Number(row.order_number),
 
-    dashboardId: rowdashboard_id,
+    dashboardId: row.dashboard_id,
 
-    categoryId: rowcategory_id,
+    categoryId: row.category_id,
 
     tokenType: category?.name || "",
 
@@ -2801,45 +2801,39 @@ async function mapV5Registration(db, row) {
 
     prefix,
 
-    quantity: Number(rowquantity),
+    quantity: Number(row.quantity),
 
-    tokenStart: `${prefix}${String(rowtoken_start).padStart(4, "0")}`,
+    tokenStart: `${prefix}${String(row.token_start).padStart(4, "0")}`,
 
-    tokenEnd: `${prefix}${String(rowtoken_end).padStart(4, "0")}`,
+    tokenEnd: `${prefix}${String(row.token_end).padStart(4, "0")}`,
 
-    name: rowcustomer_name,
+    name: row.customer_name,
 
-    email: rowcustomer_email || "",
+    email: row.customer_email || "",
 
-    phone: rowcustomer_phone || "",
+    phone: row.customer_phone || "",
 
-    payment: rowpayment_mode || "",
+    payment: row.payment_mode || "",
 
-    amount: Number(rowamount),
+    amount: Number(row.amount),
 
-    status: rowstatus,
+    status: row.status,
 
-    cancelledAt: rowcancelled_at,
+    cancelledAt: row.cancelled_at,
 
-    adminNotes: rowadmin_notes || "",
+    adminNotes: row.admin_notes || "",
 
-    date: new Date(rowcreated_at).toLocaleDateString("en-IN"),
+    date: new Date(row.created_at).toLocaleDateString("en-IN"),
 
-    time: new Date(rowcreated_at).toLocaleTimeString("en-IN", {
+    time: new Date(row.created_at).toLocaleTimeString("en-IN", {
       hour: "2-digit",
 
       minute: "2-digit",
     }),
 
-    createdAt: rowcreated_at,
+    createdAt: row.created_at,
   };
 }
-
-/* ---------------------------------------------------------
-
-   GET DASHBOARD DETAILS + CATEGORIES
-
-\--------------------------------------------------------- */
 
 app.get(
   "/api/v5/token/dashboards/:dashboardId",
