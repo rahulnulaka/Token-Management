@@ -41,6 +41,26 @@ const V5_AUTH_SECRET =
 
 const MAX_DASHBOARDS_PER_USER = 2;
 
+const pgPool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl:
+        process.env.DATABASE_SSL === "false"
+          ? false
+          : { rejectUnauthorized: false },
+    })
+  : null;
+
+function requirePg() {
+  if (!pgPool) {
+    throw Object.assign(
+      new Error("PostgreSQL is not configured. Set DATABASE_URL."),
+      { statusCode: 503 },
+    );
+  }
+  return pgPool;
+}
+
 function hashAdminPassword(
   password,
 
