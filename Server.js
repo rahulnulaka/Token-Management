@@ -1658,52 +1658,111 @@ async function createV5Registration({ dashboardId, userId, input }) {
   const db = requirePg();
   const client = await db.connect();
   const groupId = crypto.randomUUID();
+
   try {
     await client.query("BEGIN");
-    // Existing deployments gain this nullable grouping column without losing registrations.
+
+    // Add the grouping column if it does not already exist.
     await client.query(
-      "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
+      `ALTER TABLE registrations
+       ADD COLUMN IF NOT EXISTS registration_group_id UUID`,
     );
+
+    // Serialize registration creation for this dashboard.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
       `SPYA-V5-DASHBOARD:${dashboardId}`,
     ]);
+
     const dashboard = await getOwnedDashboard(client, dashboardId, userId);
-    if (!dashboard)
+
+    if (!dashboard) {
       throw Object.assign(new Error("Dashboard not found."), {
         statusCode: 404,
       });
+    }
+
+    // Validate selected categories.
+    if (!Array.isArray(input.categoryIds) || input.categoryIds.length === 0) {
+      throw Object.assign(new Error("Select at least one token category."), {
+        statusCode: 400,
+      });
+    }
+
     const categories = [];
+
     for (const categoryId of input.categoryIds) {
       const category = await getOwnedCategory(client, dashboardId, categoryId);
-      if (!category || !category.active)
+
+      if (!category || !category.active) {
         throw Object.assign(
           new Error(
             "One of the selected token categories is missing or inactive.",
           ),
           { statusCode: 404 },
         );
+      }
+
       categories.push(category);
     }
+
+    // Allocate a distinct order number for every category row.
+    // This query runs after the dashboard advisory lock is acquired.
     const nextOrderResult = await client.query(
-      `SELECT COALESCE(MAX(order_number),0)+1 AS next_order FROM registrations WHERE dashboard_id=$1`,
+      `SELECT COALESCE(MAX(order_number), 0) + 1 AS next_order
+       FROM registrations
+       WHERE dashboard_id = $1`,
       [dashboardId],
     );
-    const orderNumber = Number(nextOrderResult.rows[0].next_order);
+
+    let nextOrderNumber = Number(nextOrderResult.rows[0].next_order);
+
     const categoryEntries = [];
+
     for (const category of categories) {
-      const quantity = input.quantity;
+      // IMPORTANT: advance the order number for each category.
+      const orderNumber = nextOrderNumber++;
+
+      const quantity = Number(input.quantity);
+
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw Object.assign(
+          new Error("Quantity must be a positive whole number."),
+          { statusCode: 400 },
+        );
+      }
+
       const tokenStart = await findV5AvailableSerials(
         client,
         dashboardId,
         category.id,
         quantity,
       );
+
       const tokenEnd = tokenStart + quantity - 1;
       const amount = Number(category.price) * quantity;
+
       const registrationResult = await client.query(
         `INSERT INTO registrations
-          (dashboard_id,category_id,order_number,customer_name,customer_email,customer_phone,quantity,token_start,token_end,amount,payment_mode,status,registration_group_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Complete',$12) RETURNING *`,
+          (
+            dashboard_id,
+            category_id,
+            order_number,
+            customer_name,
+            customer_email,
+            customer_phone,
+            quantity,
+            token_start,
+            token_end,
+            amount,
+            payment_mode,
+            status,
+            registration_group_id
+          )
+         VALUES (
+            $1, $2, $3, $4, $5, $6, $7,
+            $8, $9, $10, $11, 'Complete', $12
+         )
+         RETURNING *`,
         [
           dashboardId,
           category.id,
@@ -1719,26 +1778,49 @@ async function createV5Registration({ dashboardId, userId, input }) {
           groupId,
         ],
       );
+
       const registration = registrationResult.rows[0];
+
+      // Allocate token records, reusing cancelled serials when available.
       for (let serial = tokenStart; serial <= tokenEnd; serial += 1) {
-        const existing = (
-          await client.query(
-            `SELECT id FROM tokens WHERE dashboard_id=$1 AND category_id=$2 AND serial=$3 LIMIT 1`,
-            [dashboardId, category.id, serial],
-          )
-        ).rows[0];
+        const existingResult = await client.query(
+          `SELECT id
+           FROM tokens
+           WHERE dashboard_id = $1
+             AND category_id = $2
+             AND serial = $3
+           LIMIT 1
+           FOR UPDATE`,
+          [dashboardId, category.id, serial],
+        );
+
+        const existing = existingResult.rows[0];
+
         if (existing) {
           await client.query(
-            `UPDATE tokens SET registration_id=$1,status='Allocated',created_at=NOW() WHERE id=$2`,
+            `UPDATE tokens
+             SET registration_id = $1,
+                 status = 'Allocated',
+                 created_at = NOW()
+             WHERE id = $2`,
             [registration.id, existing.id],
           );
         } else {
           await client.query(
-            `INSERT INTO tokens (dashboard_id,category_id,serial,registration_id,status) VALUES ($1,$2,$3,$4,'Allocated')`,
+            `INSERT INTO tokens
+              (
+                dashboard_id,
+                category_id,
+                serial,
+                registration_id,
+                status
+              )
+             VALUES ($1, $2, $3, $4, 'Allocated')`,
             [dashboardId, category.id, serial, registration.id],
           );
         }
       }
+
       categoryEntries.push({
         id: registration.id,
         groupId,
@@ -1768,7 +1850,9 @@ async function createV5Registration({ dashboardId, userId, input }) {
         createdAt: registration.created_at,
       });
     }
+
     await client.query("COMMIT");
+
     return combineV5RegistrationEntries(categoryEntries);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
