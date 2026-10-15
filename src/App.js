@@ -298,6 +298,35 @@ function tokenRange(entry) {
     : entry.tokenStart;
 }
 
+function entryMatchesDateFilter(entry, dateFilter) {
+  if (dateFilter === "all") return true;
+  const value = entry.createdAt || entry.date;
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfEntry = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const daysAgo = Math.floor((startOfToday - startOfEntry) / 86400000);
+  if (dateFilter === "today") return daysAgo === 0;
+  if (dateFilter === "yesterday") return daysAgo === 1;
+  if (dateFilter === "week") return daysAgo >= 0 && daysAgo < 7;
+  if (dateFilter === "month")
+    return (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth()
+    );
+  return true;
+}
+
 function printLabels(entry, associationName = "SPYA") {
   if (
     entry?.status === "Cancelled" &&
@@ -1533,15 +1562,37 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                   />
                 </Field>
                 <Field label="Payment Mode *">
-                  <select
-                    value={payment}
-                    onChange={(e) => setPayment(e.target.value)}
-                    style={styles.input}
+                  <div
+                    role="group"
+                    aria-label="Payment mode"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 10,
+                    }}
                   >
-                    <option value="">Select payment mode</option>
-                    <option value="CASH">CASH</option>
-                    <option value="UPI">UPI</option>
-                  </select>
+                    {["CASH", "UPI"].map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={payment === mode}
+                        onClick={() => setPayment(mode)}
+                        style={{
+                          ...styles.button,
+                          minHeight: 48,
+                          border:
+                            payment === mode
+                              ? "2px solid #7c3aed"
+                              : "1px solid #d1d5db",
+                          background: payment === mode ? "#f5f3ff" : "#fff",
+                          color: payment === mode ? "#6d28d9" : "#334155",
+                        }}
+                      >
+                        {payment === mode ? "✓ " : ""}
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
                 </Field>
                 <div
                   style={{
@@ -1784,14 +1835,29 @@ function UserDashboard({
   onAdmin,
 }) {
   const [filter, setFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
 
-  const filtered = useMemo(() => {
-    if (filter === "cancelled")
-      return entries.filter((e) => e.status === "Cancelled");
-    if (filter === "payment")
-      return entries.filter((e) => e.status === "Payment Not Received");
-    return entries;
-  }, [entries, filter]);
+  const filtered = useMemo(
+    () =>
+      entries.filter((entry) => {
+        const hasCancelledCategory =
+          Array.isArray(entry.categoryEntries) &&
+          entry.categoryEntries.some(
+            (category) => category.status === "Cancelled",
+          );
+        if (
+          filter === "cancelled" &&
+          entry.status !== "Cancelled" &&
+          !hasCancelledCategory
+        )
+          return false;
+        if (filter === "payment" && entry.status !== "Payment Not Received")
+          return false;
+        if (!entryMatchesDateFilter(entry, dateFilter)) return false;
+        return true;
+      }),
+    [entries, filter, dateFilter],
+  );
 
   const activeTokens = entries
     .filter((e) => e.status !== "Cancelled")
@@ -1931,26 +1997,54 @@ function UserDashboard({
             </div>
           </div>
 
-          <div style={{ padding: "10px 18px", display: "flex", gap: 7 }}>
-            {[
-              ["all", "All"],
-              ["payment", "Payment Pending"],
-              ["cancelled", "Cancelled"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setFilter(value)}
-                style={{
-                  ...styles.button,
-                  padding: "7px 10px",
-                  fontSize: 12,
-                  background: filter === value ? "#111827" : "#f1f5f9",
-                  color: filter === value ? "#fff" : "#475569",
-                }}
-              >
-                {label}
-              </button>
-            ))}
+          <div
+            style={{
+              padding: "10px 18px",
+              display: "flex",
+              gap: 7,
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {[
+                ["all", "All"],
+                ["payment", "Payment Pending"],
+                ["cancelled", "Cancelled"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  style={{
+                    ...styles.button,
+                    padding: "7px 10px",
+                    fontSize: 12,
+                    background: filter === value ? "#111827" : "#f1f5f9",
+                    color: filter === value ? "#fff" : "#475569",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <select
+              aria-label="Filter registrations by date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{
+                ...styles.input,
+                width: "auto",
+                minWidth: 150,
+                padding: "8px 10px",
+              }}
+            >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="week">Last 7 days</option>
+              <option value="month">This month</option>
+              <option value="all">All days</option>
+            </select>
           </div>
 
           {!filtered.length ? (
@@ -2367,6 +2461,7 @@ function AdminReceived({
     dashboard?.id || "",
   );
   const [filter, setFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [error, setError] = useState("");
 
   const activeDashboard =
@@ -2389,8 +2484,18 @@ function AdminReceived({
   }, [load]);
 
   const filtered = entries.filter((entry) => {
-    if (filter === "payment") return entry.status === "Payment Not Received";
-    if (filter === "cancelled") return entry.status === "Cancelled";
+    const hasCancelledCategory =
+      Array.isArray(entry.categoryEntries) &&
+      entry.categoryEntries.some((category) => category.status === "Cancelled");
+    if (filter === "payment" && entry.status !== "Payment Not Received")
+      return false;
+    if (
+      filter === "cancelled" &&
+      entry.status !== "Cancelled" &&
+      !hasCancelledCategory
+    )
+      return false;
+    if (!entryMatchesDateFilter(entry, dateFilter)) return false;
     return true;
   });
 
@@ -2585,6 +2690,23 @@ function AdminReceived({
                   {label}
                 </button>
               ))}
+              <select
+                aria-label="Filter registrations by date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{
+                  ...styles.input,
+                  width: "auto",
+                  minWidth: 140,
+                  padding: "8px 10px",
+                }}
+              >
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week">Last 7 days</option>
+                <option value="month">This month</option>
+                <option value="all">All days</option>
+              </select>
             </div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
               <button
@@ -2840,12 +2962,6 @@ export default function App() {
       const result = await getDashboards();
       setDashboards(result.dashboards || []);
 
-      if (
-        !me.adminUsername &&
-        !sessionStorage.getItem("spya_v5_admin_setup_seen")
-      ) {
-        setShowAdminSetup(true);
-      }
     } catch (e) {
       sessionStorage.removeItem(USER_TOKEN_KEY);
       setAuth(null);
@@ -2939,6 +3055,48 @@ export default function App() {
             setLoading(false);
           }}
         />
+      </>
+    );
+  }
+
+  if (screen === "admin-setup") {
+    return (
+      <>
+        <style>{css}</style>
+        <div style={styles.page}>
+          <div
+            className="spya-container"
+            style={{ ...styles.container, paddingTop: 24, paddingBottom: 48 }}
+          >
+            <button
+              type="button"
+              onClick={() => setScreen(adminReturnScreen)}
+              style={{
+                ...styles.button,
+                background: "transparent",
+                color: "#64748b",
+                paddingLeft: 0,
+              }}
+            >
+              ← Back
+            </button>
+            <div style={{ ...styles.card, padding: 24, marginTop: 12 }}>
+              <AdminCredentialsSetup
+                onDone={async () => {
+                  sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
+                  setShowAdminSetup(false);
+                  await loadAccount();
+                  setScreen(adminReturnScreen);
+                }}
+                onSkip={() => {
+                  sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
+                  setShowAdminSetup(false);
+                  setScreen(adminReturnScreen);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       </>
     );
   }
@@ -3058,7 +3216,9 @@ export default function App() {
           }}
           onAdmin={() => {
             setAdminReturnScreen("dashboard");
-            if (!auth.adminUsername) setShowAdminSetup(true);
+            setShowAdminSetup(false);
+            setShowAdminLogin(false);
+            if (!auth.adminUsername) setScreen("admin-setup");
             else if (getAdminToken()) setScreen("admin");
             else setShowAdminLogin(true);
           }}
@@ -3122,7 +3282,9 @@ export default function App() {
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => {
           setAdminReturnScreen("dashboards");
-          if (!auth.adminUsername) setShowAdminSetup(true);
+          setShowAdminSetup(false);
+          setShowAdminLogin(false);
+          if (!auth.adminUsername) setScreen("admin-setup");
           else if (getAdminToken()) setScreen("admin");
           else setShowAdminLogin(true);
         }}
@@ -3139,19 +3301,6 @@ export default function App() {
         />
       )}
 
-      {showAdminSetup && (
-        <AdminCredentialsSetup
-          onDone={() => {
-            sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-            setShowAdminSetup(false);
-            loadAccount();
-          }}
-          onSkip={() => {
-            sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-            setShowAdminSetup(false);
-          }}
-        />
-      )}
     </>
   );
 }
