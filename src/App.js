@@ -2948,7 +2948,6 @@ export default function App() {
   const [screen, setScreen] = useState("dashboards");
   const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [showAdminSetup, setShowAdminSetup] = useState(false);
   const [successEntry, setSuccessEntry] = useState(null);
 
   async function loadAccount() {
@@ -2961,7 +2960,6 @@ export default function App() {
 
       const result = await getDashboards();
       setDashboards(result.dashboards || []);
-
     } catch (e) {
       sessionStorage.removeItem(USER_TOKEN_KEY);
       setAuth(null);
@@ -3084,13 +3082,11 @@ export default function App() {
               <AdminCredentialsSetup
                 onDone={async () => {
                   sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-                  setShowAdminSetup(false);
                   await loadAccount();
                   setScreen(adminReturnScreen);
                 }}
                 onSkip={() => {
                   sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-                  setShowAdminSetup(false);
                   setScreen(adminReturnScreen);
                 }}
               />
@@ -3216,7 +3212,6 @@ export default function App() {
           }}
           onAdmin={() => {
             setAdminReturnScreen("dashboard");
-            setShowAdminSetup(false);
             setShowAdminLogin(false);
             if (!auth.adminUsername) setScreen("admin-setup");
             else if (getAdminToken()) setScreen("admin");
@@ -3282,7 +3277,6 @@ export default function App() {
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => {
           setAdminReturnScreen("dashboards");
-          setShowAdminSetup(false);
           setShowAdminLogin(false);
           if (!auth.adminUsername) setScreen("admin-setup");
           else if (getAdminToken()) setScreen("admin");
@@ -3300,7 +3294,6 @@ export default function App() {
           }}
         />
       )}
-
     </>
   );
 }
