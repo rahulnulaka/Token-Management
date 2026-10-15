@@ -62,7 +62,7 @@ button,input,select,textarea { font:inherit; max-width:100%; }
   .spya-grid-3 { grid-template-columns:1fr!important; }
   .spya-grid-4 { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
   .spya-table-wrap { overflow-x:auto!important; }
-  .spya-table { min-width:950px; }
+  .spya-table { min-width:1120px; table-layout:fixed; }
 }
 @media(max-width:480px) {
   .spya-grid-4 { grid-template-columns:1fr!important; }
@@ -197,6 +197,14 @@ async function updateRegistrationStatus(dashboardId, registrationId, status) {
 async function cancelRegistration(dashboardId, registrationId) {
   return api(
     `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+    getUserToken(),
+  );
+}
+
+async function markRegistrationPrinted(dashboardId, registrationId) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/printed`,
     { method: "POST", body: JSON.stringify({}) },
     getUserToken(),
   );
@@ -356,7 +364,7 @@ function printLabels(entry, associationName = "SPYA") {
   const win = window.open("", "_blank", "width=420,height=750");
   if (!win) {
     alert("Please allow pop-ups to print the labels.");
-    return;
+    return false;
   }
   win.document
     .write(`<!doctype html><html><head><title>SPYA Token Labels</title><style>
@@ -367,6 +375,7 @@ function printLabels(entry, associationName = "SPYA") {
     .token{text-align:center;font-family:monospace;font-size:24px;font-weight:900;letter-spacing:1px;margin:4mm 0;overflow-wrap:anywhere}.row{display:flex;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5;margin:2mm 0}.row b{font-size:9px;white-space:nowrap}.row span{text-align:right;word-break:break-word}.thanks{text-align:center;font-size:12px;font-weight:800;margin-top:auto}
     </style></head><body>${labels}<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`);
   win.document.close();
+  return true;
 }
 
 function sendWhatsAppMessage(entry, associationName = "SPYA") {
@@ -1530,11 +1539,8 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     style={styles.input}
                   >
                     <option value="">Select payment mode</option>
-                    <option value="Cash">Cash</option>
+                    <option value="CASH">CASH</option>
                     <option value="UPI">UPI</option>
-                    <option value="Card">Card</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="Other">Other</option>
                   </select>
                 </Field>
                 <div
@@ -1957,10 +1963,25 @@ function UserDashboard({
                 className="spya-table"
                 style={{
                   width: "100%",
-                  borderCollapse: "collapse",
+                  minWidth: 1120,
+                  tableLayout: "fixed",
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
                   fontSize: 12,
                 }}
               >
+                <colgroup>
+                  <col style={{ width: 145 }} />
+                  <col style={{ width: 270 }} />
+                  <col style={{ width: 130 }} />
+                  <col style={{ width: 125 }} />
+                  <col style={{ width: 55 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 145 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 185 }} />
+                </colgroup>
                 <thead>
                   <tr
                     style={{
@@ -1983,7 +2004,12 @@ function UserDashboard({
                     ].map((x) => (
                       <th
                         key={x}
-                        style={{ padding: "11px 13px", textAlign: "left" }}
+                        style={{
+                          padding: "12px 10px",
+                          textAlign: "left",
+                          whiteSpace: "nowrap",
+                          borderBottom: "1px solid #e2e8f0",
+                        }}
                       >
                         {x}
                       </th>
@@ -2000,14 +2026,27 @@ function UserDashboard({
                         key={entry.id}
                         style={{ borderTop: "1px solid #f1f5f9" }}
                       >
-                        <td style={cell}>
-                          <strong style={{ fontFamily: "monospace" }}>
+                        <td
+                          style={{
+                            ...cell,
+                            minWidth: 0,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          <strong
+                            style={{ fontFamily: "monospace", lineHeight: 1.6 }}
+                          >
                             {tokenRange(entry)}
                           </strong>
                         </td>
                         <td style={cell}>
                           <div
-                            style={{ display: "grid", gap: 6, minWidth: 150 }}
+                            style={{
+                              display: "grid",
+                              gap: 8,
+                              minWidth: 0,
+                              alignItems: "start",
+                            }}
                           >
                             {(entry.categoryEntries?.length
                               ? entry.categoryEntries
@@ -2029,9 +2068,11 @@ function UserDashboard({
                                   alignItems: "center",
                                   gap: 6,
                                   flexWrap: "wrap",
+                                  minWidth: 0,
+                                  lineHeight: 1.5,
                                 }}
                               >
-                                <span>
+                                <span style={{ overflowWrap: "anywhere" }}>
                                   {categoryEntry.categoryName}{" "}
                                   <strong style={{ fontFamily: "monospace" }}>
                                     {categoryEntry.tokenEnd &&
@@ -2063,58 +2104,106 @@ function UserDashboard({
                             ))}
                           </div>
                         </td>
-                        <td style={cell}>
+                        <td style={{ ...cell, overflowWrap: "anywhere" }}>
                           <strong>{entry.name}</strong>
                         </td>
-                        <td style={cell}>{entry.phone}</td>
-                        <td style={cell}>{entry.quantity}</td>
-                        <td style={cell}>₹{Number(entry.amount).toFixed(2)}</td>
-                        <td style={cell}>{entry.payment}</td>
+                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                          {entry.phone}
+                        </td>
+                        <td style={{ ...cell, textAlign: "center" }}>
+                          {entry.quantity}
+                        </td>
+                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                          ₹{Number(entry.amount).toFixed(2)}
+                        </td>
+                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                          {entry.payment}
+                        </td>
                         <td style={cell}>
                           <StatusBadge status={entry.status} />
                         </td>
-                        <td style={cell}>{entry.date}</td>
-                        <td style={cell}>
+                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                          {entry.date}
+                        </td>
+                        <td style={{ ...cell, minWidth: 0 }}>
                           <div
                             style={{
                               display: "flex",
-                              gap: 6,
-                              flexWrap: "wrap",
+                              flexDirection: "column",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              minWidth: 0,
                             }}
                           >
-                            {entry.status !== "Cancelled" && (
-                              <select
-                                value={
-                                  entry.status === "Partially Cancelled"
-                                    ? "Complete"
-                                    : entry.status
-                                }
-                                onChange={(e) =>
-                                  onStatusChange(entry, e.target.value)
-                                }
-                                style={{
-                                  border: "1px solid #d1d5db",
-                                  borderRadius: 8,
-                                  padding: 6,
-                                  fontSize: 11,
-                                }}
-                              >
-                                <option>Complete</option>
-                                <option>Payment Not Received</option>
-                              </select>
-                            )}
-                            <button
-                              onClick={() => onReprint(entry)}
+                            <span
                               style={{
-                                ...styles.button,
-                                padding: "7px 9px",
-                                background: "#111827",
-                                color: "#fff",
-                                fontSize: 11,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                borderRadius: 999,
+                                padding: "5px 9px",
+                                fontSize: 10,
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                                color:
+                                  (entry.printStatus || "Not Yet Printed") ===
+                                  "Complete"
+                                    ? "#047857"
+                                    : "#b45309",
+                                background:
+                                  (entry.printStatus || "Not Yet Printed") ===
+                                  "Complete"
+                                    ? "#d1fae5"
+                                    : "#fef3c7",
                               }}
                             >
-                              🖨️
-                            </button>
+                              {entry.printStatus || "Not Yet Printed"}
+                            </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 6,
+                                alignItems: "center",
+                              }}
+                            >
+                              {entry.status !== "Cancelled" && (
+                                <select
+                                  value={
+                                    entry.status === "Partially Cancelled"
+                                      ? "Complete"
+                                      : entry.status
+                                  }
+                                  onChange={(e) =>
+                                    onStatusChange(entry, e.target.value)
+                                  }
+                                  aria-label="Payment status"
+                                  style={{
+                                    border: "1px solid #d1d5db",
+                                    borderRadius: 8,
+                                    padding: 6,
+                                    fontSize: 11,
+                                    maxWidth: 130,
+                                  }}
+                                >
+                                  <option>Complete</option>
+                                  <option>Payment Not Received</option>
+                                </select>
+                              )}
+                              <button
+                                onClick={() => onReprint(entry)}
+                                title="Print / reprint labels"
+                                aria-label="Print or reprint labels"
+                                style={{
+                                  ...styles.button,
+                                  padding: "7px 9px",
+                                  background: "#111827",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                🖨️
+                              </button>
+                            </div>
                           </div>
                           {category && (
                             <span style={{ display: "none" }}>
@@ -2719,9 +2808,11 @@ function AdminReceived({
 }
 
 const cell = {
-  padding: "12px",
-  color: "#475569",
+  padding: "14px 10px",
+  color: "#334155",
   verticalAlign: "middle",
+  textAlign: "left",
+  overflowWrap: "break-word",
 };
 
 export default function App() {
@@ -2950,9 +3041,21 @@ export default function App() {
               alert(e.message);
             }
           }}
-          onReprint={(entry) =>
-            printLabels(entry, selectedDashboard.association_name)
-          }
+          onReprint={async (entry) => {
+            const opened = printLabels(
+              entry,
+              selectedDashboard.association_name,
+            );
+            if (!opened) return;
+            try {
+              await markRegistrationPrinted(selectedDashboard.id, entry.id);
+              await refreshCurrentDashboard();
+            } catch (e) {
+              alert(
+                `Labels were opened for printing, but print status could not be saved: ${e.message}`,
+              );
+            }
+          }}
           onAdmin={() => {
             setAdminReturnScreen("dashboard");
             if (!auth.adminUsername) setShowAdminSetup(true);

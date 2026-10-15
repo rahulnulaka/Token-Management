@@ -1539,7 +1539,15 @@ function normalizeV5RegistrationInput(body = {}) {
         phone: phones[i] || "",
         email: emails[i] || "",
       }));
-  const payment = String(body.payment || body.paymentMode || "").trim();
+  const rawPayment = String(body.payment || body.paymentMode || "")
+    .trim()
+    .toUpperCase();
+  const payment =
+    rawPayment === "CASH" ? "CASH" : rawPayment === "UPI" ? "UPI" : "";
+  if (!payment)
+    throw Object.assign(new Error("Payment mode must be UPI or CASH."), {
+      statusCode: 400,
+    });
   if (!categoryIds.length)
     throw Object.assign(new Error("Select at least one token category."), {
       statusCode: 400,
@@ -1875,6 +1883,7 @@ function combineV5RegistrationEntries(entries) {
     tokenEnd: e.tokenEnd,
     amount: Number(e.amount),
     status: e.status,
+    printStatus: e.printStatus || "Not Yet Printed",
   }));
   const activeCategories = categories.filter((c) => c.status !== "Cancelled");
   const visibleCategories = activeCategories.length
@@ -1899,6 +1908,11 @@ function combineV5RegistrationEntries(entries) {
     tokenStart: tokenLabels.join(" + "),
     tokenEnd: tokenLabels.join(" + "),
     categoryEntries: categories,
+    printStatus:
+      activeCategories.length > 0 &&
+      activeCategories.every((c) => c.printStatus === "Complete")
+        ? "Complete"
+        : "Not Yet Printed",
     quantity: Number(first.quantity),
     amount: entries
       .filter((e) => e.status !== "Cancelled")
@@ -1963,6 +1977,8 @@ FROM token_categories
     amount: Number(row.amount),
 
     status: row.status,
+
+    printStatus: row.print_status || "Not Yet Printed",
 
     cancelledAt: row.cancelled_at,
 
@@ -2112,6 +2128,60 @@ app.post(
 
       res.status(error.statusCode || 500).json({
         error: error.message || "Failed to create registration.",
+      });
+    }
+  },
+);
+
+/* ---------------------------------------------------------
+ MARK COMBINED REGISTRATION AS PRINTED
+ Persists the print status for all active categories in the group.
+--------------------------------------------------------- */
+app.post(
+  "/api/v5/dashboards/:dashboardId/registrations/:registrationId/printed",
+  requireV5UserRoute,
+  async (req, res) => {
+    try {
+      const db = requirePg();
+      await db.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS print_status TEXT NOT NULL DEFAULT 'Not Yet Printed'",
+      );
+
+      const dashboard = await getOwnedDashboard(
+        db,
+        req.params.dashboardId,
+        req.v5UserId,
+      );
+      if (!dashboard) {
+        return res.status(404).json({ error: "Dashboard not found." });
+      }
+
+      const target = (
+        await db.query(
+          "SELECT * FROM registrations WHERE id=$1 AND dashboard_id=$2 LIMIT 1",
+          [req.params.registrationId, dashboard.id],
+        )
+      ).rows[0];
+
+      if (!target) {
+        return res.status(404).json({ error: "Registration not found." });
+      }
+
+      const groupId = target.registration_group_id || target.id;
+      await db.query(
+        `UPDATE registrations
+            SET print_status='Complete'
+          WHERE dashboard_id=$1
+            AND status <> 'Cancelled'
+            AND COALESCE(registration_group_id::text,id::text)=$2`,
+        [dashboard.id, String(groupId)],
+      );
+
+      res.json({ success: true, printStatus: "Complete" });
+    } catch (error) {
+      console.error("V5 print status update error:", error);
+      res.status(error.statusCode || 500).json({
+        error: error.message || "Failed to save print status.",
       });
     }
   },
