@@ -270,10 +270,6 @@ function downloadAdminExcel(dashboardId) {
     .catch((error) => alert(error.message));
 }
 
-// function makeTokenId(prefix, serial) {
-//   return `${prefix}${String(serial).padStart(4, "0")}`;
-// }
-
 function tokenRange(entry) {
   if (!entry) return "";
   if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {

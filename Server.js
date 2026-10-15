@@ -15,37 +15,9 @@ const crypto = require("crypto");
 const { Pool } = require("pg");
 
 /* =========================================================
-
-
-
-
-
-
-
-   SPYA V5 - POSTGRESQL / MULTI-USER FOUNDATION
-
-
-
-
-
-
-
-   The existing Excel routes remain available during migration.
-
-
-
-
-
-
-
-   V5 routes are namespaced under /api/v5.
-
-
-
-
-
-
-
+ SPYA V5 - POSTGRESQL / MULTI-USER FOUNDATION
+ The existing Excel routes remain available during migration.
+ V5 routes are namespaced under /api/v5.
 \========================================================= */
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -127,37 +99,9 @@ app.use(express.json());
 require("./v5-foundation")(app);
 
 /* =========================================================
-
-
-
-
-
-
-
-   V5 DATABASE CONNECTION TEST
-
-
-
-
-
-
-
-   Open http\://localhost:4000/api/v5/db-test while the
-
-
-
-
-
-
-
-   backend is running to verify PostgreSQL connectivity.
-
-
-
-
-
-
-
+ V5 DATABASE CONNECTION TEST
+ Open http\://localhost:4000/api/v5/db-test while the
+ backend is running to verify PostgreSQL connectivity.
 \========================================================= */
 
 app.get("/api/v5/db-test", async (req, res) => {
@@ -254,69 +198,7 @@ const TOKEN_PRICES = {
 };
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   STATUS
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ STATUS
 \========================================================= */
 
 function normalizeStatus(value) {
@@ -334,69 +216,7 @@ function normalizeStatus(value) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   NORMALIZE EXCEL ROW
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ NORMALIZE EXCEL ROW
 \========================================================= */
 
 function normalizeRow(row = {}) {
@@ -434,69 +254,7 @@ function normalizeRow(row = {}) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   CONVERT ROW → CLIENT ENTRY
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ CONVERT ROW → CLIENT ENTRY
 \========================================================= */
 
 function toClientEntry(row) {
@@ -536,69 +294,7 @@ function toClientEntry(row) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   EXCEL LOCK CHECK
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ EXCEL LOCK CHECK
 \========================================================= */
 
 function isLockedFileError(err) {
@@ -614,69 +310,7 @@ function isLockedFileError(err) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   EXCEL WRITE CHECK
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ EXCEL WRITE CHECK
 \========================================================= */
 
 function assertExcelIsWritable() {
@@ -706,69 +340,7 @@ function assertExcelIsWritable() {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   READ EXCEL
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ READ EXCEL
 \========================================================= */
 
 function readExcel() {
@@ -795,69 +367,7 @@ function readExcel() {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   WRITE EXCEL
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ WRITE EXCEL
 \========================================================= */
 
 function writeExcel(rows) {
@@ -957,69 +467,7 @@ function writeExcel(rows) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   TOKEN HELPERS
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ TOKEN HELPERS
 \========================================================= */
 
 function getTokenPrefix(tokenType) {
@@ -1049,165 +497,9 @@ function makeTokenId(
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   TOKEN ALLOCATION
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Cancelled tokens are NOT considered used.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Therefore they can be reused.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+TOKEN ALLOCATION
+Cancelled tokens are NOT considered used.
+Therefore they can be reused.
 \========================================================= */
 
 function getNextTokenSerial(
@@ -1267,69 +559,7 @@ function getNextTokenSerial(
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ORDER NUMBER
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ORDER NUMBER
 \========================================================= */
 
 function getNextOrderNumber(rows) {
@@ -1351,165 +581,9 @@ function getNextOrderNumber(rows) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   EXCEL ALLOCATION LOCK
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Prevents two users from receiving
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   the same token/order.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ EXCEL ALLOCATION LOCK
+Prevents two users from receiving
+the same token/order.
 \========================================================= */
 
 let excelAllocationQueue = Promise.resolve();
@@ -1527,69 +601,7 @@ function withExcelAllocationLock(work) {
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN AUTHENTICATION
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN AUTHENTICATION
 \========================================================= */
 
 const ADMIN_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
@@ -1723,69 +735,7 @@ function requireAdmin(
 }
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   GET PUBLIC ENTRIES
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+GET PUBLIC ENTRIES
 \========================================================= */
 
 app.get(
@@ -1813,69 +763,7 @@ app.get(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   CREATE ORDER
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+CREATE ORDER
 \========================================================= */
 
 async function createOrder(entry) {
@@ -2027,37 +915,7 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN CREATE ORDER
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN CREATE ORDER
 \========================================================= */
 
 app.post(
@@ -2093,197 +951,9 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   UPDATE STATUS
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Complete ↔ Payment Not Received
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Cancelled cannot be changed.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ UPDATE STATUS
+Complete ↔ Payment Not Received
+Cancelled cannot be changed.
 \========================================================= */
 
 app.post(
@@ -2359,133 +1029,8 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   CANCEL ORDER
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   Cancelled is permanent.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+CANCEL ORDER
+Cancelled is permanent.
 \========================================================= */
 
 app.post(
@@ -2584,69 +1129,7 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN LOGIN
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN LOGIN
 \========================================================= */
 
 app.post(
@@ -2692,69 +1175,7 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN RECEIVED DASHBOARD
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN RECEIVED DASHBOARD
 \========================================================= */
 
 app.get(
@@ -2852,69 +1273,7 @@ app.get(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN NOTES
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN NOTES
 \========================================================= */
 
 app.post(
@@ -2972,69 +1331,7 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN-ONLY EXCEL DOWNLOAD
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN-ONLY EXCEL DOWNLOAD
 \========================================================= */
 
 app.get(
@@ -3072,69 +1369,7 @@ app.get(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   ADMIN-ONLY CLEAR
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ADMIN-ONLY CLEAR
 \========================================================= */
 
 app.post(
@@ -3164,69 +1399,7 @@ app.post(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   TEST
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+TEST
 \========================================================= */
 
 app.get(
@@ -3241,87 +1414,11 @@ app.get(
 );
 
 /* =========================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   START SERVER
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 \========================================================= */
-
 /* =========================================================
-
-
-
-   SPYA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
-
-
-
-   These routes are the V5 source-of-truth APIs.
-
-
-
-   Legacy Excel routes below remain unchanged.
-
-
-
+ SPYA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
+ These routes are the V5 source-of-truth APIs.
+ Legacy Excel routes below remain unchanged.
 \========================================================= */
 
 function getV5Bearer(req) {
@@ -3486,27 +1583,11 @@ async function getOwnedDashboard(db, dashboardId, userId) {
   return (
     await db.query(
       `SELECT *
-
-
-
-         FROM dashboards
-
-
-
-        WHERE id=$1
-
-
-
-          AND user_id=$2
-
-
-
-          AND archived_at IS NULL
-
-
-
-        LIMIT 1`,
-
+FROM dashboards
+    WHERE id=$1
+ AND user_id=$2
+ AND archived_at IS NULL
+    LIMIT 1`,
       [dashboardId, userId],
     )
   ).rows[0];
@@ -3516,22 +1597,10 @@ async function getOwnedCategory(db, dashboardId, categoryId) {
   return (
     await db.query(
       `SELECT id,dashboard_id,name,prefix,price,active
-
-
-
-         FROM token_categories
-
-
-
-        WHERE id=$1
-
-
-
-          AND dashboard_id=$2
-
-
-
-        LIMIT 1`,
+FROM token_categories
+   WHERE id=$1
+ AND dashboard_id=$2
+   LIMIT 1`,
 
       [categoryId, dashboardId],
     )
@@ -3539,22 +1608,10 @@ async function getOwnedCategory(db, dashboardId, categoryId) {
 }
 
 /*
-
-
-
- * Returns the smallest contiguous range of available serial numbers.
-
-
-
- * Only tokens whose status is Allocated are considered occupied.
-
-
-
- * Cancelled tokens therefore become reusable.
-
-
-
- */
+ * Returns the smallest contiguous range of available serial numbers.
+ * Only tokens whose status is Allocated are considered occupied.
+ * Cancelled tokens therefore become reusable.
+ */
 
 async function findV5AvailableSerials(
   client,
@@ -3567,26 +1624,11 @@ async function findV5AvailableSerials(
 ) {
   const result = await client.query(
     `SELECT serial
-
-
-
-       FROM tokens
-
-
-
-      WHERE dashboard_id=$1
-
-
-
-        AND category_id=$2
-
-
-
-        AND status='Allocated'
-
-
-
-      ORDER BY serial`,
+  FROM tokens
+ WHERE dashboard_id=$1
+  AND category_id=$2
+   AND status='Allocated'
+  ORDER BY serial`,
 
     [dashboardId, categoryId],
   );
@@ -3791,18 +1833,9 @@ async function mapV5Registration(db, row) {
   const category = (
     await db.query(
       `SELECT name,prefix
-
-
-
-         FROM token_categories
-
-
-
-        WHERE id=$1
-
-
-
-        LIMIT 1`,
+FROM token_categories
+   WHERE id=$1
+    LIMIT 1`,
 
       [row.category_id],
     )
@@ -3887,18 +1920,9 @@ app.get(
       const categories = (
         await db.query(
           `SELECT id,name,prefix,price,active,created_at,updated_at
-
-
-
-             FROM token_categories
-
-
-
-            WHERE dashboard_id=$1
-
-
-
-            ORDER BY created_at`,
+ FROM token_categories
+  WHERE dashboard_id=$1
+ ORDER BY created_at`,
 
           [dashboard.id],
         )
@@ -3916,13 +1940,7 @@ app.get(
 );
 
 /* ---------------------------------------------------------
-
-
-
-   GET USER REGISTRATIONS
-
-
-
+ GET USER REGISTRATIONS
 \--------------------------------------------------------- */
 
 app.get(
@@ -3949,18 +1967,9 @@ app.get(
       const rows = (
         await db.query(
           `SELECT *
-
-
-
-             FROM registrations
-
-
-
-            WHERE dashboard_id=$1
-
-
-
-            ORDER BY created_at DESC`,
+ FROM registrations
+  WHERE dashboard_id=$1
+ ORDER BY created_at DESC`,
 
           [dashboard.id],
         )
@@ -3992,13 +2001,7 @@ app.get(
 );
 
 /* ---------------------------------------------------------
-
-
-
-   CREATE USER REGISTRATION
-
-
-
+ CREATE USER REGISTRATION
 \--------------------------------------------------------- */
 
 app.post(
@@ -4031,21 +2034,9 @@ app.post(
 );
 
 /* ---------------------------------------------------------
-
-
-
-   UPDATE STATUS
-
-
-
-   Complete <-> Payment Not Received
-
-
-
-   Cancelled is permanent.
-
-
-
+ UPDATE STATUS
+ Complete <-> Payment Not Received
+ Cancelled is permanent.
 \--------------------------------------------------------- */
 
 /* ---------------------------------------------------------
@@ -4080,11 +2071,9 @@ app.post(
         )
       ).rows[0];
       if (!target || target.status === "Cancelled")
-        return res
-          .status(404)
-          .json({
-            error: "Registration not found or it is already cancelled.",
-          });
+        return res.status(404).json({
+          error: "Registration not found or it is already cancelled.",
+        });
       const groupId = target.registration_group_id || target.id;
       const result = await db.query(
         `UPDATE registrations SET status=$1 WHERE dashboard_id=$2 AND status <> 'Cancelled' AND COALESCE(registration_group_id::text,id::text)=$3 RETURNING *`,
@@ -4208,26 +2197,11 @@ app.get(
       const dashboard = (
         await db.query(
           `SELECT *
-
-
-
-             FROM dashboards
-
-
-
-            WHERE id=$1
-
-
-
-              AND user_id=$2
-
-
-
-              AND archived_at IS NULL
-
-
-
-            LIMIT 1`,
+ FROM dashboards
+ WHERE id=$1
+  AND user_id=$2
+ AND archived_at IS NULL
+ LIMIT 1`,
 
           [req.params.dashboardId, req.v5AdminUserId],
         )
@@ -4240,18 +2214,9 @@ app.get(
       const rows = (
         await db.query(
           `SELECT *
-
-
-
-             FROM registrations
-
-
-
-            WHERE dashboard_id=$1
-
-
-
-            ORDER BY created_at DESC`,
+ FROM registrations
+ WHERE dashboard_id=$1
+ ORDER BY created_at DESC`,
 
           [dashboard.id],
         )
@@ -4339,13 +2304,7 @@ app.get(
 );
 
 /* ---------------------------------------------------------
-
-
-
-   ADMIN STATUS
-
-
-
+ADMIN STATUS
 \--------------------------------------------------------- */
 
 app.post(
@@ -4373,11 +2332,9 @@ app.post(
         )
       ).rows[0];
       if (!target || target.status === "Cancelled")
-        return res
-          .status(404)
-          .json({
-            error: "Registration not found or it is already cancelled.",
-          });
+        return res.status(404).json({
+          error: "Registration not found or it is already cancelled.",
+        });
       const groupId = String(target.registration_group_id || target.id);
       const result = await db.query(
         `UPDATE registrations SET status=$1 WHERE dashboard_id=$2 AND status <> 'Cancelled' AND COALESCE(registration_group_id::text,id::text)=$3 RETURNING *`,
@@ -4493,38 +2450,14 @@ app.post(
 
       const result = await db.query(
         `UPDATE registrations r
-
-
-
-            SET admin_notes=$1
-
-
-
-           FROM dashboards d
-
-
-
-          WHERE r.id=$2
-
-
-
-            AND r.dashboard_id=$3
-
-
-
-            AND d.id=r.dashboard_id
-
-
-
-            AND d.user_id=$4
-
-
-
-            AND d.archived_at IS NULL
-
-
-
-        RETURNING r.*`,
+SET admin_notes=$1
+FROM dashboards d
+ WHERE r.id=$2
+ AND r.dashboard_id=$3
+ AND d.id=r.dashboard_id
+ AND d.user_id=$4
+ AND d.archived_at IS NULL
+   RETURNING r.*`,
 
         [
           notes,
@@ -4557,21 +2490,9 @@ app.post(
 );
 
 /* ---------------------------------------------------------
-
-
-
-   ADMIN EXCEL EXPORT
-
-
-
-   PostgreSQL remains the source of truth.
-
-
-
-   Excel is only an export.
-
-
-
+ADMIN EXCEL EXPORT
+ PostgreSQL remains the source of truth.
+ Excel is only an export.
 \--------------------------------------------------------- */
 
 app.get(
@@ -4586,26 +2507,11 @@ app.get(
       const dashboard = (
         await db.query(
           `SELECT id,association_name
-
-
-
-             FROM dashboards
-
-
-
-            WHERE id=$1
-
-
-
-              AND user_id=$2
-
-
-
-              AND archived_at IS NULL
-
-
-
-            LIMIT 1`,
+ FROM dashboards
+ WHERE id=$1
+  AND user_id=$2
+ AND archived_at IS NULL
+ LIMIT 1`,
 
           [req.params.dashboardId, req.v5AdminUserId],
         )
@@ -4618,82 +2524,25 @@ app.get(
       const rows = (
         await db.query(
           `SELECT
-
-
-
-             r.order_number,
-
-
-
-             c.name AS category_name,
-
-
-
-             c.prefix,
-
-
-
-             r.quantity,
-
-
-
-             r.token_start,
-
-
-
-             r.token_end,
-
-
-
-             r.customer_name,
-
-
-
-             r.customer_email,
-
-
-
-             r.customer_phone,
-
-
-
-             r.payment_mode,
-
-
-
-             r.amount,
-
-
-
-             r.status,
-
-
-
-             r.cancelled_at,
-
-
-
-             r.admin_notes,
-
-
-
-             r.created_at
-
-
-
-           FROM registrations r
-
-
-
-           JOIN token_categories c ON c.id=r.category_id
-
-
-
-          WHERE r.dashboard_id=$1
-
-
-
-          ORDER BY r.created_at DESC`,
+ r.order_number,
+c.name AS category_name,
+ c.prefix,
+ r.quantity,
+ r.token_start,
+ r.token_end,
+ r.customer_name,
+ r.customer_email,
+ r.customer_phone,
+ r.payment_mode,
+ r.amount,
+ r.status,
+r.cancelled_at,
+r.admin_notes,
+ r.created_at
+FROM registrations r
+JOIN token_categories c ON c.id=r.category_id
+ WHERE r.dashboard_id=$1
+ORDER BY r.created_at DESC`,
 
           [dashboard.id],
         )

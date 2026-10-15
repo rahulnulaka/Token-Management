@@ -206,9 +206,9 @@ module.exports = function registerV5(app) {
         await db.query(
           `INSERT INTO users(username,password_hash)
 
-         VALUES($1,$2)
+           VALUES($1,$2)
 
-         RETURNING id,username,created_at`,
+           RETURNING id,username,created_at`,
 
           [username, hashPassword(password)],
         )
@@ -256,11 +256,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,username,password_hash,created_at
 
-         FROM users
+           FROM users
 
-         WHERE LOWER(username)=LOWER($1)
+           WHERE LOWER(username)=LOWER($1)
 
-         LIMIT 1`,
+           LIMIT 1`,
 
           [username],
         )
@@ -274,11 +274,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,association_name
 
-         FROM dashboards
+           FROM dashboards
 
-         WHERE user_id=$1 AND archived_at IS NULL
+          WHERE user_id=$1 AND archived_at IS NULL
 
-         ORDER BY created_at`,
+ ORDER BY created_at`,
 
           [user.id],
         )
@@ -336,9 +336,9 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,username,created_at
 
-         FROM users
+FROM users
 
-         WHERE id=$1`,
+WHERE id=$1`,
 
           [req.v5UserId],
         )
@@ -350,11 +350,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
 
-         FROM dashboards
+FROM dashboards
 
-         WHERE user_id=$1 AND archived_at IS NULL
+WHERE user_id=$1 AND archived_at IS NULL
 
-         ORDER BY created_at`,
+ORDER BY created_at`,
 
           [req.v5UserId],
         )
@@ -428,9 +428,9 @@ module.exports = function registerV5(app) {
         await db.query(
           `INSERT INTO admin_accounts(user_id,username,password_hash)
 
-         VALUES($1,$2,$3)
+VALUES($1,$2,$3)
 
-         RETURNING id,username`,
+RETURNING id,username`,
 
           [req.v5UserId, username, hashPassword(password)],
         )
@@ -454,11 +454,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,user_id,username,password_hash
 
-         FROM admin_accounts
+FROM admin_accounts
 
-         WHERE username=$1
+WHERE username=$1
 
-         LIMIT 1`,
+LIMIT 1`,
 
           [username],
         )
@@ -472,11 +472,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,association_name
 
-         FROM dashboards
+FROM dashboards
 
-         WHERE user_id=$1 AND archived_at IS NULL
+WHERE user_id=$1 AND archived_at IS NULL
 
-         ORDER BY created_at`,
+ORDER BY created_at`,
 
           [admin.user_id],
         )
@@ -522,11 +522,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
 
-         FROM dashboards
+FROM dashboards
 
-         WHERE user_id=$1 AND archived_at IS NULL
+WHERE user_id=$1 AND archived_at IS NULL
 
-         ORDER BY created_at`,
+ORDER BY created_at`,
 
           [req.v5UserId],
         )
@@ -557,9 +557,9 @@ module.exports = function registerV5(app) {
           await client.query(
             `SELECT COUNT(*)::int AS count
 
-           FROM dashboards
+ FROM dashboards
 
-           WHERE user_id=$1 AND archived_at IS NULL`,
+ WHERE user_id=$1 AND archived_at IS NULL`,
 
             [req.v5UserId],
           )
@@ -597,13 +597,13 @@ module.exports = function registerV5(app) {
           await client.query(
             `INSERT INTO dashboards(
 
-             user_id,association_name,contact_phone,contact_email,address,description
+ user_id,association_name,contact_phone,contact_email,address,description
 
-           )
+ )
 
-           VALUES($1,$2,$3,$4,$5,$6)
+ VALUES($1,$2,$3,$4,$5,$6)
 
-           RETURNING *`,
+ RETURNING *`,
 
             [
               req.v5UserId,
@@ -652,11 +652,11 @@ module.exports = function registerV5(app) {
           await client.query(
             `INSERT INTO token_categories(
 
-             dashboard_id,name,prefix,price,active
+ dashboard_id,name,prefix,price,active
 
-           )
+ )
 
-           VALUES($1,$2,$3,$4,true)`,
+ VALUES($1,$2,$3,$4,true)`,
 
             [dashboard.id, name, prefix, price],
           );
@@ -668,11 +668,11 @@ module.exports = function registerV5(app) {
           await db.query(
             `SELECT id,name,prefix,price,active
 
-           FROM token_categories
+ FROM token_categories
 
-           WHERE dashboard_id=$1
+ WHERE dashboard_id=$1
 
-           ORDER BY created_at`,
+ ORDER BY created_at`,
 
             [dashboard.id],
           )
@@ -705,9 +705,9 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT *
 
-           FROM dashboards
+ FROM dashboards
 
-           WHERE id=$1 AND user_id=$2 AND archived_at IS NULL`,
+ WHERE id=$1 AND user_id=$2 AND archived_at IS NULL`,
 
           [req.params.dashboardId, req.v5UserId],
         )
@@ -721,11 +721,11 @@ module.exports = function registerV5(app) {
         await db.query(
           `SELECT id,name,prefix,price,active,created_at,updated_at
 
-           FROM token_categories
+ FROM token_categories
 
-           WHERE dashboard_id=$1
+ WHERE dashboard_id=$1
 
-           ORDER BY created_at`,
+ ORDER BY created_at`,
 
           [dashboard.id],
         )
