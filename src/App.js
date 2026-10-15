@@ -276,20 +276,53 @@ function makeTokenId(prefix, serial) {
 
 function tokenRange(entry) {
   if (!entry) return "";
+  if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {
+    const active = entry.categoryEntries.filter(
+      (category) => category.status !== "Cancelled",
+    );
+    const shown = active.length ? active : entry.categoryEntries;
+    return shown
+      .map((category) =>
+        category.tokenEnd && category.tokenEnd !== category.tokenStart
+          ? `${category.tokenStart}–${category.tokenEnd}`
+          : category.tokenStart,
+      )
+      .join(" + ");
+  }
   return entry.tokenEnd && entry.tokenEnd !== entry.tokenStart
     ? `${entry.tokenStart} – ${entry.tokenEnd}`
     : entry.tokenStart;
 }
 
 function printLabels(entry, associationName = "SPYA") {
-  const quantity = Number(entry.quantity) || 1;
-  const start = Number(
-    String(entry.tokenStart || "").match(/(\d+)$/)?.[1] || 0,
-  );
-  const ids = Array.from({ length: quantity }, (_, i) =>
-    makeTokenId(entry.prefix || "", start + i),
-  );
-
+  if (
+    entry?.status === "Cancelled" &&
+    !(
+      Array.isArray(entry.categoryEntries) &&
+      entry.categoryEntries.some((category) => category.status !== "Cancelled")
+    )
+  ) {
+    alert("This token has no active categories to print.");
+    return;
+  }
+  const categories =
+    Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
+      ? entry.categoryEntries.filter(
+          (category) => category.status !== "Cancelled",
+        )
+      : [
+          {
+            categoryName: entry.categoryName || entry.tokenType || "",
+            prefix: entry.prefix || "",
+            tokenStart: entry.tokenStart,
+            tokenEnd: entry.tokenEnd,
+          },
+        ];
+  if (!categories.length) {
+    alert("This combined token has no active categories to print.");
+    return;
+  }
+  const quantity = Math.max(1, Number(entry.quantity) || 1);
   const escapeHtml = (value) =>
     String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -297,68 +330,112 @@ function printLabels(entry, associationName = "SPYA") {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-
-  const labels = ids
-    .map((id) =>
-      Array.from(
-        { length: 2 },
-        () => `
+  const serialFor = (value, offset) => {
+    const serial =
+      Number(String(value || "").match(/(\d+)$/)?.[1] || 0) + offset;
+    const prefix = String(value || "").replace(/\d+$/, "");
+    return `${prefix}${String(serial).padStart(4, "0")}`;
+  };
+  const labels = Array.from({ length: quantity }, (_, index) => {
+    const ids = categories.map((category) =>
+      serialFor(category.tokenStart, index),
+    );
+    const tokenText = ids.join(" + ");
+    return Array.from(
+      { length: 2 },
+      () => `
       <div class="label">
         <div class="brand">${escapeHtml(associationName || "SPYA")}</div>
-        <div class="datetime">
-          <span>${escapeHtml(entry.date || "")}</span>
-          <span>|</span>
-          <span>${escapeHtml(entry.time || "")}</span>
-        </div>
+        <div class="datetime"><span>${escapeHtml(entry.date || "")}</span><span>|</span><span>${escapeHtml(entry.time || "")}</span></div>
         <div class="divider"></div>
-        <div class="category">${escapeHtml(entry.categoryName || entry.tokenType || "")}</div>
-        <div class="token">${escapeHtml(id)}</div>
+        <div class="category">${escapeHtml(categories.map((c) => c.categoryName).join(" + "))}</div>
+        <div class="token">${escapeHtml(tokenText)}</div>
         <div class="row"><b>NAME</b><span>${escapeHtml(entry.name)}</span></div>
         <div class="row"><b>PHONE</b><span>${escapeHtml(entry.phone)}</span></div>
         <div class="row"><b>PAYMENT MODE</b><span>${escapeHtml(entry.payment)}</span></div>
-        <div class="divider"></div>
-        <div class="thanks">Thank you! 🙏</div>
-      </div>
-    `,
-      ).join(""),
-    )
-    .join("");
-
+        <div class="divider"></div><div class="thanks">Thank you! 🙏</div>
+      </div>`,
+    ).join("");
+  }).join("");
   const win = window.open("", "_blank", "width=420,height=750");
   if (!win) {
     alert("Please allow pop-ups to print the labels.");
     return;
   }
-
-  win.document.write(`
-    <!doctype html>
-    <html>
-    <head>
-      <title>SPYA Token Labels</title>
-      <style>
-        *{box-sizing:border-box}
-        @page{size:80mm auto;margin:0}
-        body{margin:0;font-family:Arial,sans-serif;color:#111}
-        .label{width:80mm;min-height:72mm;padding:6mm 5mm 5mm;
-          display:flex;flex-direction:column;page-break-after:always}
-        .brand{text-align:center;font-size:21px;font-weight:900;letter-spacing:2px}
-        .datetime{text-align:center;margin-top:4px;font-size:10px;color:#555;display:flex;gap:7px;justify-content:center}
-        .divider{border-top:1px dashed #aaa;margin:5mm 0}
-        .category{align-self:center;border:2px solid #111;padding:2.5mm 7mm;font-size:19px;font-weight:900;text-transform:uppercase}
-        .token{text-align:center;font-family:monospace;font-size:31px;font-weight:900;letter-spacing:2px;margin:4mm 0}
-        .row{display:flex;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5;margin:2mm 0}
-        .row b{font-size:9px;white-space:nowrap}
-        .row span{text-align:right;word-break:break-word}
-        .thanks{text-align:center;font-size:12px;font-weight:800;margin-top:auto}
-      </style>
-    </head>
-    <body>
-      ${labels}
-      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
-    </body>
-    </html>
-  `);
+  win.document
+    .write(`<!doctype html><html><head><title>SPYA Token Labels</title><style>
+    *{box-sizing:border-box}@page{size:80mm auto;margin:0}body{margin:0;font-family:Arial,sans-serif;color:#111}
+    .label{width:80mm;min-height:72mm;padding:6mm 5mm 5mm;display:flex;flex-direction:column;page-break-after:always}
+    .brand{text-align:center;font-size:21px;font-weight:900;letter-spacing:2px}.datetime{text-align:center;margin-top:4px;font-size:10px;color:#555;display:flex;gap:7px;justify-content:center}
+    .divider{border-top:1px dashed #aaa;margin:5mm 0}.category{align-self:center;border:2px solid #111;padding:2.5mm 7mm;font-size:19px;font-weight:900;text-transform:uppercase;text-align:center}
+    .token{text-align:center;font-family:monospace;font-size:24px;font-weight:900;letter-spacing:1px;margin:4mm 0;overflow-wrap:anywhere}.row{display:flex;justify-content:space-between;gap:8px;font-size:11px;line-height:1.5;margin:2mm 0}.row b{font-size:9px;white-space:nowrap}.row span{text-align:right;word-break:break-word}.thanks{text-align:center;font-size:12px;font-weight:800;margin-top:auto}
+    </style></head><body>${labels}<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`);
   win.document.close();
+}
+
+function sendWhatsAppMessage(entry, associationName = "SPYA") {
+  if (
+    entry?.status === "Cancelled" &&
+    !(
+      Array.isArray(entry.categoryEntries) &&
+      entry.categoryEntries.some((category) => category.status !== "Cancelled")
+    )
+  ) {
+    alert("This token has no active categories to send.");
+    return;
+  }
+  const rawPhone = String(entry?.phone || "").trim();
+  let phone = rawPhone.replace(/\D/g, "");
+  if (phone.startsWith("0")) phone = phone.slice(1);
+  if (phone.length === 10) phone = `91${phone}`;
+  if (!phone || phone.length < 10) {
+    alert(
+      "A valid customer phone number is required to send a WhatsApp message.",
+    );
+    return;
+  }
+  const categories =
+    Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
+      ? entry.categoryEntries.filter(
+          (category) => category.status !== "Cancelled",
+        )
+      : [
+          {
+            categoryName: entry.categoryName || entry.tokenType || "",
+            tokenStart: entry.tokenStart,
+            prefix: entry.prefix || "",
+          },
+        ];
+  if (!categories.length) {
+    alert("This combined token has no active categories to send.");
+    return;
+  }
+  const quantity = Math.max(1, Number(entry.quantity) || 1);
+  const serialFor = (value, offset) => {
+    const serial =
+      Number(String(value || "").match(/(\d+)$/)?.[1] || 0) + offset;
+    const prefix = String(value || "").replace(/\d+$/, "");
+    return `${prefix}${String(serial).padStart(4, "0")}`;
+  };
+  const tokens = Array.from({ length: quantity }, (_, i) =>
+    categories.map((c) => serialFor(c.tokenStart, i)).join(" + "),
+  );
+  const message = [
+    associationName || "SPYA",
+    `${entry.date || ""} | ${entry.time || ""}`,
+    `Category: ${categories.map((c) => c.categoryName).join(" + ")}`,
+    `Token${tokens.length > 1 ? "s" : ""}: ${tokens.join(", ")}`,
+    `Name: ${entry.name || ""}`,
+    `Phone: ${entry.phone || ""}`,
+    `Payment Mode: ${entry.payment || ""}`,
+    `Amount: ₹${Number(entry.amount || 0).toFixed(2)}`,
+    "",
+    "Thank you! 🙏",
+  ].join("\n");
+  window.open(
+    `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+    "_blank",
+  );
 }
 
 function Field({ label, children }) {
@@ -1194,7 +1271,9 @@ function DashboardHome({
 }
 
 function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
-  const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState(
+    categories[0]?.id ? [categories[0].id] : [],
+  );
   const [quantity, setQuantity] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -1202,44 +1281,64 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
   const [payment, setPayment] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const category = categories.find((item) => item.id === categoryId);
-  const amount = Number(category?.price || 0) * Number(quantity || 0);
+  const selectedCategories = categories.filter((c) =>
+    selectedCategoryIds.includes(c.id),
+  );
+  const amountPerCustomer =
+    selectedCategories.reduce((sum, c) => sum + Number(c.price || 0), 0) *
+    Number(quantity || 0);
+  const names = name
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const phones = phone
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const emails = email.split(",").map((v) => v.trim());
 
   async function submit(e) {
     e.preventDefault();
-
-    if (
-      !categoryId ||
-      !name.trim() ||
-      !Number.isInteger(Number(quantity)) ||
-      Number(quantity) < 1
-    ) {
+    if (!selectedCategoryIds.length) {
+      setError("Select at least one token category.");
+      return;
+    }
+    if (!names.length) {
+      setError("Enter at least one customer name.");
+      return;
+    }
+    if (names.length !== phones.length) {
       setError(
-        "Select a category, enter the customer name and a valid quantity.",
+        "Enter the same number of comma-separated phone numbers as customer names, in the same order.",
       );
       return;
     }
-
+    if (names.some((v) => !v) || phones.some((v) => !v)) {
+      setError("Every customer must have a name and phone number.");
+      return;
+    }
+    if (!Number.isInteger(Number(quantity)) || Number(quantity) < 1) {
+      setError("Enter a valid quantity.");
+      return;
+    }
     if (!payment) {
       setError("Select a payment mode.");
       return;
     }
-
     try {
       setLoading(true);
       setError("");
-
       const result = await createRegistration(dashboard.id, {
-        categoryId,
+        categoryIds: selectedCategoryIds,
         quantity: Number(quantity),
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
+        customers: names.map((customerName, index) => ({
+          name: customerName,
+          phone: phones[index],
+          email: (emails[index] || "").trim(),
+        })),
         payment,
       });
-
-      onSaved(result.entry);
+      onSaved(result.entries || (result.entry ? [result.entry] : []));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1264,7 +1363,6 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
         >
           ← {dashboard.association_name}
         </button>
-
         <div style={{ ...styles.card, padding: 26, marginTop: 10 }}>
           <div
             style={{
@@ -1276,13 +1374,61 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
           >
             NEW REGISTRATION
           </div>
-          <h1 style={{ margin: "6px 0 3px", fontSize: 27 }}>Create Token</h1>
+          <h1 style={{ margin: "6px 0 3px", fontSize: 27 }}>
+            Create Combined Token
+          </h1>
           <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-            Token numbers are allocated by PostgreSQL and cancelled numbers are
-            automatically reusable.
+            Select one or more categories. Each customer gets one combined
+            label; each category is saved as its own registration row.
           </p>
-
           <form onSubmit={submit} style={{ marginTop: 25 }}>
+            <Field label="Token Categories *">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+                  gap: 8,
+                }}
+              >
+                {categories.map((item, index) => {
+                  const selected = selectedCategoryIds.includes(item.id);
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() =>
+                        setSelectedCategoryIds((current) =>
+                          selected
+                            ? current.filter((id) => id !== item.id)
+                            : [...current, item.id],
+                        )
+                      }
+                      style={{
+                        ...styles.button,
+                        padding: 14,
+                        textAlign: "left",
+                        background: selected ? "#f5f3ff" : "#f8fafc",
+                        color: selected ? "#6d28d9" : "#334155",
+                        border: selected
+                          ? "2px solid #a78bfa"
+                          : "1px solid #e5e7eb",
+                      }}
+                    >
+                      <div style={{ fontSize: 20 }}>
+                        {DEFAULT_ICONS[index % DEFAULT_ICONS.length]}
+                      </div>
+                      <div style={{ marginTop: 5, fontWeight: 800 }}>
+                        {selected ? "✓ " : ""}
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: 11, marginTop: 3 }}>
+                        ₹{Number(item.price).toFixed(2)} · {item.prefix}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
             <div
               className="spya-grid-2"
               style={{
@@ -1292,47 +1438,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
               }}
             >
               <div>
-                <Field label="Token Category *">
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2,minmax(0,1fr))",
-                      gap: 8,
-                    }}
-                  >
-                    {categories.map((item, index) => (
-                      <button
-                        type="button"
-                        key={item.id}
-                        onClick={() => setCategoryId(item.id)}
-                        style={{
-                          ...styles.button,
-                          padding: 14,
-                          textAlign: "left",
-                          background:
-                            categoryId === item.id ? "#f5f3ff" : "#f8fafc",
-                          color: categoryId === item.id ? "#6d28d9" : "#334155",
-                          border:
-                            categoryId === item.id
-                              ? "2px solid #a78bfa"
-                              : "1px solid #e5e7eb",
-                        }}
-                      >
-                        <div style={{ fontSize: 20 }}>
-                          {DEFAULT_ICONS[index % DEFAULT_ICONS.length]}
-                        </div>
-                        <div style={{ marginTop: 5, fontWeight: 800 }}>
-                          {item.name}
-                        </div>
-                        <div style={{ fontSize: 11, marginTop: 3 }}>
-                          ₹{Number(item.price).toFixed(2)} · {item.prefix}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-
-                <Field label="Number of Tokens *">
+                <Field label="Quantity per Customer *">
                   <div style={{ display: "flex" }}>
                     <button
                       type="button"
@@ -1377,131 +1483,111 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     </button>
                   </div>
                 </Field>
-
-                <div
-                  style={{
-                    background: "#f8fafc",
-                    borderRadius: 14,
-                    padding: 16,
-                    marginBottom: 16,
-                  }}
-                >
-                  <div
+                <Field label="Customer Names *">
+                  <textarea
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Rahul, Priya, Kiran"
+                    rows={3}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
+                      ...styles.input,
+                      minHeight: 80,
+                      resize: "vertical",
                     }}
-                  >
-                    <span style={{ color: "#64748b", fontSize: 13 }}>
-                      TOTAL AMOUNT
-                    </span>
-                    <strong style={{ fontSize: 23 }}>
-                      ₹{amount.toFixed(2)}
-                    </strong>
-                  </div>
-                  <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>
-                    ₹{Number(category?.price || 0).toFixed(2)} ×{" "}
-                    {Number(quantity) || 0}
-                  </div>
-                </div>
-
-                <Field label="Payment Mode *">
-                  <div
+                  />
+                </Field>
+                <Field label="Phone Numbers *">
+                  <textarea
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="9876543210, 9876543211, 9876543212"
+                    rows={3}
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 8,
+                      ...styles.input,
+                      minHeight: 80,
+                      resize: "vertical",
                     }}
-                  >
-                    {["Cash", "Online"].map((mode) => (
-                      <button
-                        type="button"
-                        key={mode}
-                        onClick={() => setPayment(mode)}
-                        style={{
-                          ...styles.button,
-                          background: payment === mode ? "#ecfdf5" : "#f8fafc",
-                          color: payment === mode ? "#047857" : "#475569",
-                          border:
-                            payment === mode
-                              ? "1px solid #6ee7b7"
-                              : "1px solid #e5e7eb",
-                        }}
-                      >
-                        {mode === "Cash" ? "💵" : "📱"} {mode}
-                      </button>
-                    ))}
+                  />
+                  <div style={{ color: "#64748b", fontSize: 11, marginTop: 5 }}>
+                    Match each phone number to the name in the same position.
                   </div>
                 </Field>
               </div>
-
               <div>
-                <Field label="Customer Name *">
-                  <input
-                    autoFocus
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    style={styles.input}
-                    placeholder="Full name"
-                  />
-                </Field>
-                <Field label="Phone">
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={styles.input}
-                    placeholder="+91..."
-                  />
-                </Field>
-                <Field label="Email">
-                  <input
+                <Field label="Email Addresses (optional)">
+                  <textarea
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    style={styles.input}
-                    placeholder="customer@example.com"
+                    placeholder="Optional; separate emails with commas"
+                    rows={2}
+                    style={{
+                      ...styles.input,
+                      minHeight: 60,
+                      resize: "vertical",
+                    }}
                   />
                 </Field>
-
+                <Field label="Payment Mode *">
+                  <select
+                    value={payment}
+                    onChange={(e) => setPayment(e.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="">Select payment mode</option>
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </Field>
                 <div
                   style={{
-                    ...styles.card,
-                    background: "#faf5ff",
-                    border: "1px solid #e9d5ff",
-                    padding: 20,
+                    background: "#f8fafc",
+                    borderRadius: 13,
+                    padding: 16,
                     marginTop: 8,
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#7c3aed",
-                      fontWeight: 900,
-                      letterSpacing: 1,
-                    }}
-                  >
-                    TOKEN PREVIEW
+                  <div style={{ fontWeight: 800, marginBottom: 8 }}>
+                    Order Summary
                   </div>
-                  <div style={{ fontSize: 26, fontWeight: 900, marginTop: 12 }}>
-                    {category?.prefix || "TOK"}####
+                  <div style={{ color: "#64748b", fontSize: 13 }}>
+                    Categories:{" "}
+                    {selectedCategories.map((c) => c.name).join(" + ") ||
+                      "None selected"}
                   </div>
-                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 5 }}>
-                    PostgreSQL assigns the actual next available number when you
-                    save.
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 5 }}>
+                    Customers: {names.length}
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 5 }}>
+                    Amount per customer: ₹{amountPerCustomer.toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 900, marginTop: 8 }}>
+                    Total: ₹{(amountPerCustomer * names.length).toFixed(2)}
                   </div>
                 </div>
               </div>
             </div>
-
-            {error && <ErrorText>{error}</ErrorText>}
-
+            {error && (
+              <div
+                style={{
+                  color: "#b91c1c",
+                  background: "#fef2f2",
+                  padding: 12,
+                  borderRadius: 10,
+                  marginTop: 12,
+                }}
+              >
+                {error}
+              </div>
+            )}
             <div
-              className="spya-actions"
               style={{
                 display: "flex",
                 gap: 10,
-                justifyContent: "flex-end",
-                marginTop: 24,
+                flexWrap: "wrap",
+                marginTop: 22,
               }}
             >
               <button
@@ -1516,14 +1602,18 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                 Cancel
               </button>
               <button
+                type="submit"
                 disabled={loading}
                 style={{
                   ...styles.button,
-                  background: "#111827",
+                  background: "#6d28d9",
                   color: "#fff",
+                  flex: 1,
                 }}
               >
-                {loading ? "Creating..." : "Create Registration"}
+                {loading
+                  ? "Creating tokens..."
+                  : `Create ${names.length || 0} Customer Token${names.length === 1 ? "" : "s"}`}
               </button>
             </div>
           </form>
@@ -1534,9 +1624,12 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
 }
 
 function SuccessModal({ entry, associationName, onClose }) {
+  const entries = Array.isArray(entry) ? entry : [entry];
   return (
     <Modal>
-      <div style={{ textAlign: "center" }}>
+      <div
+        style={{ textAlign: "center", maxHeight: "80vh", overflowY: "auto" }}
+      >
         <div style={{ fontSize: 42, color: "#059669" }}>✓</div>
         <div
           style={{
@@ -1548,85 +1641,129 @@ function SuccessModal({ entry, associationName, onClose }) {
         >
           REGISTRATION COMPLETE
         </div>
-        <div
+        <p style={{ color: "#64748b", fontSize: 13, margin: "8px 0 18px" }}>
+          {entries.length} customer token{entries.length === 1 ? "" : "s"}{" "}
+          created. Print or send each customer their own combined token details.
+        </p>
+        {entries.map((item) => (
+          <div
+            key={item.groupId || item.id}
+            style={{
+              background: "#f8fafc",
+              borderRadius: 13,
+              padding: 15,
+              textAlign: "left",
+              margin: "12px 0",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 20,
+                fontFamily: "monospace",
+                fontWeight: 900,
+                textAlign: "center",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {tokenRange(item)}
+            </div>
+            <div
+              style={{
+                textAlign: "center",
+                color: "#64748b",
+                fontSize: 12,
+                marginBottom: 8,
+              }}
+            >
+              {item.categoryName} · Order {item.orderId}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: 5,
+              }}
+            >
+              <span>Name</span>
+              <strong>{item.name}</strong>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: 5,
+              }}
+            >
+              <span>Phone</span>
+              <strong>{item.phone}</strong>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: 5,
+              }}
+            >
+              <span>Payment</span>
+              <strong>{item.payment}</strong>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: 5,
+              }}
+            >
+              <span>Amount</span>
+              <strong>₹{Number(item.amount).toFixed(2)}</strong>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                marginTop: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => printLabels(item, associationName)}
+                style={{
+                  ...styles.button,
+                  flex: "1 1 120px",
+                  background: "#111827",
+                  color: "#fff",
+                }}
+              >
+                🖨️ Print Labels
+              </button>
+              <button
+                type="button"
+                onClick={() => sendWhatsAppMessage(item, associationName)}
+                style={{
+                  ...styles.button,
+                  flex: "1 1 160px",
+                  background: "#16a34a",
+                  color: "#fff",
+                }}
+              >
+                💬 Send WhatsApp Message
+              </button>
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={onClose}
           style={{
-            fontSize: 40,
-            fontFamily: "monospace",
-            fontWeight: 900,
-            margin: "8px 0",
+            ...styles.button,
+            background: "#f3f4f6",
+            color: "#374151",
+            marginTop: 8,
           }}
         >
-          {tokenRange(entry)}
-        </div>
-        <div style={{ color: "#64748b", fontSize: 13 }}>
-          Order {entry.orderId} · {entry.quantity} token
-          {Number(entry.quantity) > 1 ? "s" : ""}
-        </div>
-
-        <div
-          style={{
-            background: "#f8fafc",
-            borderRadius: 13,
-            padding: 15,
-            textAlign: "left",
-            margin: "20px 0",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: 5,
-            }}
-          >
-            <span>Name</span>
-            <strong>{entry.name}</strong>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: 5,
-            }}
-          >
-            <span>Payment</span>
-            <strong>{entry.payment}</strong>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: 5,
-            }}
-          >
-            <span>Amount</span>
-            <strong>₹{Number(entry.amount).toFixed(2)}</strong>
-          </div>
-        </div>
-
-        <div className="spya-actions" style={{ display: "flex", gap: 10 }}>
-          <button
-            onClick={() => printLabels(entry, associationName)}
-            style={{
-              ...styles.button,
-              flex: 1,
-              background: "#111827",
-              color: "#fff",
-            }}
-          >
-            🖨️ Print Labels
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              ...styles.button,
-              background: "#f3f4f6",
-              color: "#374151",
-            }}
-          >
-            Done
-          </button>
-        </div>
+          Done
+        </button>
       </div>
     </Modal>
   );
@@ -1642,6 +1779,7 @@ function UserDashboard({
   onStatusChange,
   onCancel,
   onReprint,
+  onAdmin,
 }) {
   const [filter, setFilter] = useState("all");
 
@@ -1683,8 +1821,30 @@ function UserDashboard({
           >
             ← Dashboards
           </button>
-          <div style={{ fontWeight: 900, letterSpacing: 1.2 }}>
-            {dashboard.association_name}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontWeight: 900, letterSpacing: 1.2 }}>
+              {dashboard.association_name}
+            </div>
+            <button
+              type="button"
+              onClick={onAdmin}
+              style={{
+                ...styles.button,
+                background: "#111827",
+                color: "#fff",
+                padding: "8px 11px",
+                fontSize: 12,
+              }}
+            >
+              🔐 Admin Received
+            </button>
           </div>
         </div>
 
@@ -1849,7 +2009,64 @@ function UserDashboard({
                             {tokenRange(entry)}
                           </strong>
                         </td>
-                        <td style={cell}>{entry.categoryName}</td>
+                        <td style={cell}>
+                          <div
+                            style={{ display: "grid", gap: 6, minWidth: 150 }}
+                          >
+                            {(entry.categoryEntries?.length
+                              ? entry.categoryEntries
+                              : [
+                                  {
+                                    id: entry.id,
+                                    categoryName: entry.categoryName,
+                                    tokenStart: entry.tokenStart,
+                                    tokenEnd: entry.tokenEnd,
+                                    amount: entry.amount,
+                                    status: entry.status,
+                                  },
+                                ]
+                            ).map((categoryEntry) => (
+                              <div
+                                key={categoryEntry.id}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span>
+                                  {categoryEntry.categoryName}{" "}
+                                  <strong style={{ fontFamily: "monospace" }}>
+                                    {categoryEntry.tokenEnd &&
+                                    categoryEntry.tokenEnd !==
+                                      categoryEntry.tokenStart
+                                      ? `${categoryEntry.tokenStart}–${categoryEntry.tokenEnd}`
+                                      : categoryEntry.tokenStart}
+                                  </strong>
+                                </span>
+                                <StatusBadge status={categoryEntry.status} />
+                                {categoryEntry.status !== "Cancelled" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onCancel(entry, categoryEntry)
+                                    }
+                                    style={{
+                                      ...styles.button,
+                                      padding: "4px 7px",
+                                      background: "#fef2f2",
+                                      color: "#b91c1c",
+                                      fontSize: 10,
+                                    }}
+                                  >
+                                    Cancel category
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
                         <td style={cell}>
                           <strong>{entry.name}</strong>
                         </td>
@@ -1871,7 +2088,11 @@ function UserDashboard({
                           >
                             {entry.status !== "Cancelled" && (
                               <select
-                                value={entry.status}
+                                value={
+                                  entry.status === "Partially Cancelled"
+                                    ? "Complete"
+                                    : entry.status
+                                }
                                 onChange={(e) =>
                                   onStatusChange(entry, e.target.value)
                                 }
@@ -1898,20 +2119,6 @@ function UserDashboard({
                             >
                               🖨️
                             </button>
-                            {entry.status !== "Cancelled" && (
-                              <button
-                                onClick={() => onCancel(entry)}
-                                style={{
-                                  ...styles.button,
-                                  padding: "7px 9px",
-                                  background: "#fef2f2",
-                                  color: "#b91c1c",
-                                  fontSize: 11,
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            )}
                           </div>
                           {category && (
                             <span style={{ display: "none" }}>
@@ -1952,6 +2159,7 @@ function Stat({ label, value }) {
 
 function StatusBadge({ status }) {
   const cancelled = status === "Cancelled";
+  const partial = status === "Partially Cancelled";
   const pending = status === "Payment Not Received";
   return (
     <span
@@ -1962,8 +2170,20 @@ function StatusBadge({ status }) {
         fontWeight: 800,
         fontSize: 10,
         whiteSpace: "nowrap",
-        background: cancelled ? "#fef2f2" : pending ? "#fff7ed" : "#ecfdf5",
-        color: cancelled ? "#b91c1c" : pending ? "#c2410c" : "#047857",
+        background: cancelled
+          ? "#fef2f2"
+          : partial
+            ? "#fff7ed"
+            : pending
+              ? "#fff7ed"
+              : "#ecfdf5",
+        color: cancelled
+          ? "#b91c1c"
+          : partial
+            ? "#9a3412"
+            : pending
+              ? "#c2410c"
+              : "#047857",
       }}
     >
       {status}
@@ -2098,10 +2318,22 @@ function AdminReceived({
     }
   }
 
-  async function cancel(entry) {
-    if (!window.confirm(`Cancel ${tokenRange(entry)}?`)) return;
+  async function cancel(dashboardId, entry, categoryEntry) {
+    const categoryName =
+      categoryEntry?.categoryName || entry.categoryName || "selected category";
+    const serial = categoryEntry?.tokenStart || tokenRange(entry);
+    if (
+      !window.confirm(
+        `Cancel only ${categoryName} (${serial}) for ${entry.name}? Other categories will remain active, and this serial can be reused.`,
+      )
+    )
+      return;
     try {
-      await onCancel(activeDashboard.id, entry);
+      await onCancel(
+        dashboardId,
+        entry,
+        categoryEntry || { id: entry.id, categoryName, tokenStart: serial },
+      );
       await load();
     } catch (e) {
       alert(e.message);
@@ -2355,7 +2587,66 @@ function AdminReceived({
                       style={{ borderTop: "1px solid #f1f5f9" }}
                     >
                       <td style={cell}>{tokenRange(entry)}</td>
-                      <td style={cell}>{entry.categoryName}</td>
+                      <td style={cell}>
+                        <div style={{ display: "grid", gap: 6, minWidth: 150 }}>
+                          {(entry.categoryEntries?.length
+                            ? entry.categoryEntries
+                            : [
+                                {
+                                  id: entry.id,
+                                  categoryName: entry.categoryName,
+                                  tokenStart: entry.tokenStart,
+                                  tokenEnd: entry.tokenEnd,
+                                  amount: entry.amount,
+                                  status: entry.status,
+                                },
+                              ]
+                          ).map((categoryEntry) => (
+                            <div
+                              key={categoryEntry.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <span>
+                                {categoryEntry.categoryName}{" "}
+                                <strong style={{ fontFamily: "monospace" }}>
+                                  {categoryEntry.tokenEnd &&
+                                  categoryEntry.tokenEnd !==
+                                    categoryEntry.tokenStart
+                                    ? `${categoryEntry.tokenStart}–${categoryEntry.tokenEnd}`
+                                    : categoryEntry.tokenStart}
+                                </strong>
+                              </span>
+                              <StatusBadge status={categoryEntry.status} />
+                              {categoryEntry.status !== "Cancelled" && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    cancel(
+                                      activeDashboard.id,
+                                      entry,
+                                      categoryEntry,
+                                    )
+                                  }
+                                  style={{
+                                    ...styles.button,
+                                    padding: "4px 7px",
+                                    background: "#fef2f2",
+                                    color: "#b91c1c",
+                                    fontSize: 10,
+                                  }}
+                                >
+                                  Cancel category
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
                       <td style={{ ...cell, fontWeight: 800 }}>{entry.name}</td>
                       <td style={cell}>{entry.phone}</td>
                       <td style={cell}>{entry.quantity}</td>
@@ -2384,7 +2675,11 @@ function AdminReceived({
                         >
                           {entry.status !== "Cancelled" && (
                             <select
-                              value={entry.status}
+                              value={
+                                entry.status === "Partially Cancelled"
+                                  ? "Complete"
+                                  : entry.status
+                              }
                               onChange={(e) =>
                                 changeStatus(entry, e.target.value)
                               }
@@ -2413,20 +2708,6 @@ function AdminReceived({
                           >
                             🖨️
                           </button>
-                          {entry.status !== "Cancelled" && (
-                            <button
-                              onClick={() => cancel(entry)}
-                              style={{
-                                ...styles.button,
-                                padding: "6px 8px",
-                                background: "#fef2f2",
-                                color: "#b91c1c",
-                                fontSize: 10,
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -2456,6 +2737,7 @@ export default function App() {
   const [dashboardDetails, setDashboardDetails] = useState(null);
   const [entries, setEntries] = useState([]);
   const [screen, setScreen] = useState("dashboards");
+  const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showAdminSetup, setShowAdminSetup] = useState(false);
   const [successEntry, setSuccessEntry] = useState(null);
@@ -2599,10 +2881,13 @@ export default function App() {
           dashboard={selectedDashboard}
           categories={dashboardDetails.categories || []}
           onBack={() => setScreen("dashboard")}
-          onSaved={(entry) => {
-            setEntries((current) => [entry, ...current]);
+          onSaved={(createdEntries) => {
+            const list = Array.isArray(createdEntries)
+              ? createdEntries
+              : [createdEntries];
+            setEntries((current) => [...list, ...current]);
             setScreen("dashboard");
-            setSuccessEntry(entry);
+            setSuccessEntry(list);
           }}
         />
         {successEntry && (
@@ -2647,23 +2932,24 @@ export default function App() {
               alert(e.message);
             }
           }}
-          onCancel={async (entry) => {
+          onCancel={async (entry, categoryEntry) => {
+            const categoryName =
+              categoryEntry?.categoryName ||
+              entry.categoryName ||
+              "selected category";
+            const serial = categoryEntry?.tokenStart || tokenRange(entry);
             if (
               !window.confirm(
-                `Cancel ${tokenRange(entry)}? Cancelled token numbers will become reusable.`,
+                `Cancel only ${categoryName} (${serial}) for ${entry.name}? Other categories will remain active, and this serial can be reused.`,
               )
             )
               return;
             try {
-              const result = await cancelRegistration(
+              await cancelRegistration(
                 selectedDashboard.id,
-                entry.id,
+                categoryEntry?.id || entry.id,
               );
-              setEntries((current) =>
-                current.map((item) =>
-                  item.id === result.entry.id ? result.entry : item,
-                ),
-              );
+              await refreshCurrentDashboard();
             } catch (e) {
               alert(e.message);
             }
@@ -2671,6 +2957,12 @@ export default function App() {
           onReprint={(entry) =>
             printLabels(entry, selectedDashboard.association_name)
           }
+          onAdmin={() => {
+            setAdminReturnScreen("dashboard");
+            if (!auth.adminUsername) setShowAdminSetup(true);
+            else if (getAdminToken()) setScreen("admin");
+            else setShowAdminLogin(true);
+          }}
         />
         {successEntry && (
           <SuccessModal
@@ -2688,9 +2980,9 @@ export default function App() {
       <>
         <style>{css}</style>
         <AdminReceived
-          dashboard={dashboards[0]}
+          dashboard={selectedDashboard || dashboards[0]}
           dashboards={dashboards}
-          onBack={() => setScreen("dashboards")}
+          onBack={() => setScreen(adminReturnScreen)}
           onRefresh={() => {}}
           onDownload={downloadAdminExcel}
           onCreate={() => {
@@ -2701,13 +2993,16 @@ export default function App() {
           }}
           onLogout={() => {
             sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-            setScreen("dashboards");
+            setScreen(adminReturnScreen);
           }}
           onStatusChange={async (dashboardId, entry, status) => {
             await updateAdminStatus(dashboardId, entry.id, status);
           }}
-          onCancel={async (dashboardId, entry) => {
-            await cancelAdminRegistration(dashboardId, entry.id);
+          onCancel={async (dashboardId, entry, categoryEntry) => {
+            await cancelAdminRegistration(
+              dashboardId,
+              categoryEntry?.id || entry.id,
+            );
           }}
           onReprint={printLabels}
         />
@@ -2727,13 +3022,10 @@ export default function App() {
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => {
-          if (!auth.adminUsername) {
-            setShowAdminSetup(true);
-          } else if (getAdminToken()) {
-            setScreen("admin");
-          } else {
-            setShowAdminLogin(true);
-          }
+          setAdminReturnScreen("dashboards");
+          if (!auth.adminUsername) setShowAdminSetup(true);
+          else if (getAdminToken()) setScreen("admin");
+          else setShowAdminLogin(true);
         }}
         onLogout={logout}
       />

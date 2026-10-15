@@ -1,8 +1,11 @@
 const crypto = require("crypto");
+
 const { Pool } = require("pg");
 
 const MAX_DASHBOARDS_PER_USER = 2;
+
 const USER_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 const V5_AUTH_SECRET =
   process.env.V5_AUTH_SECRET ||
   process.env.ADMIN_TOKEN_SECRET ||
@@ -11,6 +14,7 @@ const V5_AUTH_SECRET =
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
+
       ssl:
         process.env.DATABASE_SSL === "false"
           ? false
@@ -22,33 +26,46 @@ function requireDb() {
   if (!pool) {
     throw Object.assign(
       new Error("PostgreSQL is not configured. Set DATABASE_URL."),
+
       { statusCode: 503 },
     );
   }
+
   return pool;
 }
 
 function token(payload) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+
   const signature = crypto
+
     .createHmac("sha256", V5_AUTH_SECRET)
+
     .update(encoded)
+
     .digest("base64url");
+
   return `${encoded}.${signature}`;
 }
 
 function verifyToken(value) {
   try {
     const [encoded, signature] = String(value || "").split(".");
+
     if (!encoded || !signature) return null;
 
     const expected = crypto
+
       .createHmac("sha256", V5_AUTH_SECRET)
+
       .update(encoded)
+
       .digest("base64url");
 
     const a = Buffer.from(signature);
+
     const b = Buffer.from(expected);
+
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
 
     const payload = JSON.parse(
@@ -63,25 +80,31 @@ function verifyToken(value) {
 
 function bearer(req) {
   const h = String(req.headers.authorization || "");
+
   return h.startsWith("Bearer ") ? h.slice(7) : "";
 }
 
 function requireUser(req, res, next) {
   const p = verifyToken(bearer(req));
+
   if (!p || p.type !== "user")
     return res.status(401).json({ error: "V5 authentication required." });
 
   req.v5UserId = p.sub;
+
   next();
 }
 
 function requireAdmin(req, res, next) {
   const p = verifyToken(bearer(req));
+
   if (!p || p.type !== "admin")
     return res.status(401).json({ error: "V5 admin authentication required." });
 
   req.v5AdminUserId = p.sub;
+
   req.v5AdminId = p.adminId;
+
   next();
 }
 
@@ -92,12 +115,17 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
 function checkPassword(password, stored) {
   try {
     const [salt, expected] = String(stored || "").split(":");
+
     if (!salt || !expected) return false;
 
     const actual = crypto
+
       .scryptSync(String(password), salt, 64)
+
       .toString("hex");
+
     const a = Buffer.from(actual, "hex");
+
     const b = Buffer.from(expected, "hex");
 
     return a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -109,6 +137,7 @@ function checkPassword(password, stored) {
 function normalizeUsername(value) {
   const username = String(value || "")
     .trim()
+
     .toLowerCase();
 
   if (!/^[a-z0-9][a-z0-9_.-]{3,39}$/.test(username)) {
@@ -116,6 +145,7 @@ function normalizeUsername(value) {
       new Error(
         "User ID must be 4-40 characters and use only letters, numbers, dot, underscore or hyphen.",
       ),
+
       { statusCode: 400 },
     );
   }
@@ -129,6 +159,7 @@ function validatePassword(value) {
   if (password.length < 8 || password.length > 128) {
     throw Object.assign(
       new Error("Password must be between 8 and 128 characters."),
+
       { statusCode: 400 },
     );
   }
@@ -142,18 +173,25 @@ function asyncRoute(fn) {
 
 module.exports = function registerV5(app) {
   // ------------------------------------------------------------
+
   // USER REGISTRATION
+
   // ------------------------------------------------------------
+
   app.post(
     "/api/v5/auth/register",
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
+
       const username = normalizeUsername(req.body?.username);
+
       const password = validatePassword(req.body?.password);
 
       const existing = (
         await db.query(
           "SELECT id FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1",
+
           [username],
         )
       ).rows[0];
@@ -167,46 +205,63 @@ module.exports = function registerV5(app) {
       const user = (
         await db.query(
           `INSERT INTO users(username,password_hash)
-         VALUES($1,$2)
-         RETURNING id,username,created_at`,
+
+         VALUES($1,$2)
+
+         RETURNING id,username,created_at`,
+
           [username, hashPassword(password)],
         )
       ).rows[0];
 
       const userToken = token({
         type: "user",
+
         sub: user.id,
+
         exp: Date.now() + USER_TOKEN_TTL_MS,
       });
 
       return res.status(201).json({
         success: true,
+
         token: userToken,
+
         user,
+
         dashboards: [],
+
         hasAdmin: false,
+
         adminUsername: null,
+
         dashboardLimit: MAX_DASHBOARDS_PER_USER,
       });
     }),
-  );
-
-  // ------------------------------------------------------------
+  ); // ------------------------------------------------------------
   // USER LOGIN
   // ------------------------------------------------------------
+
   app.post(
     "/api/v5/auth/login",
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
+
       const username = normalizeUsername(req.body?.username);
+
       const password = String(req.body?.password || "");
 
       const user = (
         await db.query(
           `SELECT id,username,password_hash,created_at
-         FROM users
-         WHERE LOWER(username)=LOWER($1)
-         LIMIT 1`,
+
+         FROM users
+
+         WHERE LOWER(username)=LOWER($1)
+
+         LIMIT 1`,
+
           [username],
         )
       ).rows[0];
@@ -218,9 +273,13 @@ module.exports = function registerV5(app) {
       const dashboards = (
         await db.query(
           `SELECT id,association_name
-         FROM dashboards
-         WHERE user_id=$1 AND archived_at IS NULL
-         ORDER BY created_at`,
+
+         FROM dashboards
+
+         WHERE user_id=$1 AND archived_at IS NULL
+
+         ORDER BY created_at`,
+
           [user.id],
         )
       ).rows;
@@ -228,44 +287,59 @@ module.exports = function registerV5(app) {
       const admin = (
         await db.query(
           "SELECT username FROM admin_accounts WHERE user_id=$1 LIMIT 1",
+
           [user.id],
         )
       ).rows[0];
 
       return res.json({
         success: true,
+
         token: token({
           type: "user",
+
           sub: user.id,
+
           exp: Date.now() + USER_TOKEN_TTL_MS,
         }),
+
         user: {
           id: user.id,
+
           username: user.username,
+
           created_at: user.created_at,
         },
+
         hasAdmin: !!admin,
+
         adminUsername: admin?.username || null,
+
         dashboards,
+
         dashboardLimit: MAX_DASHBOARDS_PER_USER,
       });
     }),
-  );
-
-  // ------------------------------------------------------------
+  ); // ------------------------------------------------------------
   // CURRENT USER
   // ------------------------------------------------------------
+
   app.get(
     "/api/v5/me",
+
     requireUser,
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
 
       const user = (
         await db.query(
           `SELECT id,username,created_at
-         FROM users
-         WHERE id=$1`,
+
+         FROM users
+
+         WHERE id=$1`,
+
           [req.v5UserId],
         )
       ).rows[0];
@@ -275,9 +349,13 @@ module.exports = function registerV5(app) {
       const dashboards = (
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
-         FROM dashboards
-         WHERE user_id=$1 AND archived_at IS NULL
-         ORDER BY created_at`,
+
+         FROM dashboards
+
+         WHERE user_id=$1 AND archived_at IS NULL
+
+         ORDER BY created_at`,
+
           [req.v5UserId],
         )
       ).rows;
@@ -285,28 +363,35 @@ module.exports = function registerV5(app) {
       const admin = (
         await db.query(
           "SELECT username FROM admin_accounts WHERE user_id=$1 LIMIT 1",
+
           [req.v5UserId],
         )
       ).rows[0];
 
       res.json({
         user,
+
         dashboards,
+
         adminUsername: admin?.username || null,
+
         dashboardLimit: MAX_DASHBOARDS_PER_USER,
       });
     }),
-  );
-
-  // ------------------------------------------------------------
+  ); // ------------------------------------------------------------
   // ONE ADMIN ACCOUNT PER USER
   // ------------------------------------------------------------
+
   app.post(
     "/api/v5/admin/credentials",
+
     requireUser,
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
+
       const username = String(req.body?.username || "").trim();
+
       const password = validatePassword(req.body?.password);
 
       if (!/^[A-Za-z0-9_.-]{4,40}$/.test(username)) {
@@ -342,8 +427,11 @@ module.exports = function registerV5(app) {
       const row = (
         await db.query(
           `INSERT INTO admin_accounts(user_id,username,password_hash)
-         VALUES($1,$2,$3)
-         RETURNING id,username`,
+
+         VALUES($1,$2,$3)
+
+         RETURNING id,username`,
+
           [req.v5UserId, username, hashPassword(password)],
         )
       ).rows[0];
@@ -354,17 +442,24 @@ module.exports = function registerV5(app) {
 
   app.post(
     "/api/v5/admin/login",
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
+
       const username = String(req.body?.username || "").trim();
+
       const password = String(req.body?.password || "");
 
       const admin = (
         await db.query(
           `SELECT id,user_id,username,password_hash
-         FROM admin_accounts
-         WHERE username=$1
-         LIMIT 1`,
+
+         FROM admin_accounts
+
+         WHERE username=$1
+
+         LIMIT 1`,
+
           [username],
         )
       ).rows[0];
@@ -376,53 +471,72 @@ module.exports = function registerV5(app) {
       const dashboards = (
         await db.query(
           `SELECT id,association_name
-         FROM dashboards
-         WHERE user_id=$1 AND archived_at IS NULL
-         ORDER BY created_at`,
+
+         FROM dashboards
+
+         WHERE user_id=$1 AND archived_at IS NULL
+
+         ORDER BY created_at`,
+
           [admin.user_id],
         )
       ).rows;
 
       res.json({
         success: true,
+
         token: token({
           type: "admin",
+
           sub: admin.user_id,
+
           adminId: admin.id,
+
           exp: Date.now() + 8 * 3600000,
         }),
+
         admin: {
           id: admin.id,
+
           username: admin.username,
+
           userId: admin.user_id,
         },
+
         dashboards,
       });
     }),
-  );
-
-  // ------------------------------------------------------------
+  ); // ------------------------------------------------------------
   // DASHBOARDS
   // ------------------------------------------------------------
+
   app.get(
     "/api/v5/dashboards",
+
     requireUser,
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
 
       const rows = (
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
-         FROM dashboards
-         WHERE user_id=$1 AND archived_at IS NULL
-         ORDER BY created_at`,
+
+         FROM dashboards
+
+         WHERE user_id=$1 AND archived_at IS NULL
+
+         ORDER BY created_at`,
+
           [req.v5UserId],
         )
       ).rows;
 
       res.json({
         dashboards: rows,
+
         limit: MAX_DASHBOARDS_PER_USER,
+
         remaining: MAX_DASHBOARDS_PER_USER - rows.length,
       });
     }),
@@ -430,17 +544,23 @@ module.exports = function registerV5(app) {
 
   app.post(
     "/api/v5/dashboards",
+
     requireUser,
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
+
       const client = await db.connect();
 
       try {
         const count = (
           await client.query(
             `SELECT COUNT(*)::int AS count
-           FROM dashboards
-           WHERE user_id=$1 AND archived_at IS NULL`,
+
+           FROM dashboards
+
+           WHERE user_id=$1 AND archived_at IS NULL`,
+
             [req.v5UserId],
           )
         ).rows[0].count;
@@ -452,13 +572,16 @@ module.exports = function registerV5(app) {
         }
 
         const associationName = String(req.body?.associationName || "").trim();
+
         const categories = Array.isArray(req.body?.categories)
           ? req.body.categories
           : [];
 
         if (!associationName) {
           return res
+
             .status(400)
+
             .json({ error: "Association name is required." });
         }
 
@@ -473,16 +596,26 @@ module.exports = function registerV5(app) {
         const dashboard = (
           await client.query(
             `INSERT INTO dashboards(
-             user_id,association_name,contact_phone,contact_email,address,description
-           )
-           VALUES($1,$2,$3,$4,$5,$6)
-           RETURNING *`,
+
+             user_id,association_name,contact_phone,contact_email,address,description
+
+           )
+
+           VALUES($1,$2,$3,$4,$5,$6)
+
+           RETURNING *`,
+
             [
               req.v5UserId,
+
               associationName,
+
               req.body?.contactPhone || null,
+
               req.body?.contactEmail || null,
+
               req.body?.address || null,
+
               req.body?.description || null,
             ],
           )
@@ -492,14 +625,18 @@ module.exports = function registerV5(app) {
 
         for (const c of categories) {
           const name = String(c?.name || "").trim();
+
           const prefix = String(c?.prefix || "")
             .trim()
+
             .toUpperCase();
+
           const price = Number(c?.price);
 
           if (!name || !prefix || !Number.isFinite(price) || price < 0) {
             throw Object.assign(
               new Error("Each category needs a name, prefix and valid price."),
+
               { statusCode: 400 },
             );
           }
@@ -514,9 +651,13 @@ module.exports = function registerV5(app) {
 
           await client.query(
             `INSERT INTO token_categories(
-             dashboard_id,name,prefix,price,active
-           )
-           VALUES($1,$2,$3,$4,true)`,
+
+             dashboard_id,name,prefix,price,active
+
+           )
+
+           VALUES($1,$2,$3,$4,true)`,
+
             [dashboard.id, name, prefix, price],
           );
         }
@@ -526,19 +667,25 @@ module.exports = function registerV5(app) {
         const cats = (
           await db.query(
             `SELECT id,name,prefix,price,active
-           FROM token_categories
-           WHERE dashboard_id=$1
-           ORDER BY created_at`,
+
+           FROM token_categories
+
+           WHERE dashboard_id=$1
+
+           ORDER BY created_at`,
+
             [dashboard.id],
           )
         ).rows;
 
         res.status(201).json({
           success: true,
+
           dashboard: { ...dashboard, categories: cats },
         });
       } catch (e) {
         await client.query("ROLLBACK").catch(() => {});
+
         throw e;
       } finally {
         client.release();
@@ -548,15 +695,20 @@ module.exports = function registerV5(app) {
 
   app.get(
     "/api/v5/dashboards/:dashboardId",
+
     requireUser,
+
     asyncRoute(async (req, res) => {
       const db = requireDb();
 
       const dashboard = (
         await db.query(
           `SELECT *
-           FROM dashboards
-           WHERE id=$1 AND user_id=$2 AND archived_at IS NULL`,
+
+           FROM dashboards
+
+           WHERE id=$1 AND user_id=$2 AND archived_at IS NULL`,
+
           [req.params.dashboardId, req.v5UserId],
         )
       ).rows[0];
@@ -568,9 +720,13 @@ module.exports = function registerV5(app) {
       const categories = (
         await db.query(
           `SELECT id,name,prefix,price,active,created_at,updated_at
-           FROM token_categories
-           WHERE dashboard_id=$1
-           ORDER BY created_at`,
+
+           FROM token_categories
+
+           WHERE dashboard_id=$1
+
+           ORDER BY created_at`,
+
           [dashboard.id],
         )
       ).rows;

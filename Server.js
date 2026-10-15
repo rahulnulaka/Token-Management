@@ -18,15 +18,31 @@ const { Pool } = require("pg");
 
 
 
-   SPYA V5 - POSTGRESQL / MULTI-USER FOUNDATION
 
 
 
-   The existing Excel routes remain available during migration.
+
+   SPYA V5 - POSTGRESQL / MULTI-USER FOUNDATION
 
 
 
-   V5 routes are namespaced under /api/v5.
+
+
+
+
+   The existing Excel routes remain available during migration.
+
+
+
+
+
+
+
+   V5 routes are namespaced under /api/v5.
+
+
+
+
 
 
 
@@ -44,6 +60,7 @@ const MAX_DASHBOARDS_PER_USER = 2;
 const pgPool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
+
       ssl:
         process.env.DATABASE_SSL === "false"
           ? false
@@ -55,9 +72,11 @@ function requirePg() {
   if (!pgPool) {
     throw Object.assign(
       new Error("PostgreSQL is not configured. Set DATABASE_URL."),
+
       { statusCode: 503 },
     );
   }
+
   return pgPool;
 }
 
@@ -111,15 +130,31 @@ require("./v5-foundation")(app);
 
 
 
-   V5 DATABASE CONNECTION TEST
 
 
 
-   Open http\://localhost:4000/api/v5/db-test while the
+
+   V5 DATABASE CONNECTION TEST
 
 
 
-   backend is running to verify PostgreSQL connectivity.
+
+
+
+
+   Open http\://localhost:4000/api/v5/db-test while the
+
+
+
+
+
+
+
+   backend is running to verify PostgreSQL connectivity.
+
+
+
+
 
 
 
@@ -234,7 +269,39 @@ const TOKEN_PRICES = {
 
 
 
-   STATUS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   STATUS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -282,7 +349,39 @@ function normalizeStatus(value) {
 
 
 
-   NORMALIZE EXCEL ROW
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   NORMALIZE EXCEL ROW
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -302,31 +401,31 @@ function normalizeStatus(value) {
 
 function normalizeRow(row = {}) {
   return {
-    "Order ID": row["Order ID"] ?? row["Order Id"] ?? rowOrderID ?? "",
+    "Order ID": row["Order ID"] ?? row["Order Id"] ?? "",
 
     "Token Type": row["Token Type"] ?? row["Token type"] ?? "",
 
-    Quantity: Number(rowQuantity ?? 0),
+    Quantity: Number(row["Quantity"] ?? 0),
 
     "Token Start": row["Token Start"] ?? "",
 
     "Token End": row["Token End"] ?? "",
 
-    Name: rowName ?? "",
+    Name: row["Name"] ?? "",
 
-    Email: rowEmail ?? "",
+    Email: row["Email"] ?? "",
 
-    Phone: rowPhone ?? "",
+    Phone: row["Phone"] ?? "",
 
-    Payment: rowPayment ?? row["Payment Mode"] ?? "",
+    Payment: row["Payment"] ?? row["Payment Mode"] ?? "",
 
-    Amount: Number(rowAmount ?? 0) || 0,
+    Amount: Number(row["Amount"] ?? 0) || 0,
 
-    Date: rowDate ?? "",
+    Date: row["Date"] ?? "",
 
-    Time: rowTime ?? "",
+    Time: row["Time"] ?? "",
 
-    Status: normalizeStatus(rowStatus),
+    Status: normalizeStatus(row["Status"]),
 
     "Cancelled At": row["Cancelled At"] ?? "",
 
@@ -350,7 +449,39 @@ function normalizeRow(row = {}) {
 
 
 
-   CONVERT ROW → CLIENT ENTRY
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   CONVERT ROW → CLIENT ENTRY
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -420,7 +551,39 @@ function toClientEntry(row) {
 
 
 
-   EXCEL LOCK CHECK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   EXCEL LOCK CHECK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -466,7 +629,39 @@ function isLockedFileError(err) {
 
 
 
-   EXCEL WRITE CHECK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   EXCEL WRITE CHECK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -526,7 +721,39 @@ function assertExcelIsWritable() {
 
 
 
-   READ EXCEL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   READ EXCEL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -583,7 +810,39 @@ function readExcel() {
 
 
 
-   WRITE EXCEL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   WRITE EXCEL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -713,7 +972,39 @@ function writeExcel(rows) {
 
 
 
-   TOKEN HELPERS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   TOKEN HELPERS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -773,7 +1064,23 @@ function makeTokenId(
 
 
 
-   TOKEN ALLOCATION
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   TOKEN ALLOCATION
 
 
 
@@ -805,7 +1112,6 @@ function makeTokenId(
 
 
 
-   Cancelled tokens are NOT considered used.
 
 
 
@@ -821,7 +1127,72 @@ function makeTokenId(
 
 
 
-   Therefore they can be reused.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Cancelled tokens are NOT considered used.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Therefore they can be reused.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -851,13 +1222,13 @@ function getNextTokenSerial(
   for (const raw of rows) {
     const row = normalizeRow(raw);
 
-    if (row["Token Type"] !== tokenType || rowStatus === "Cancelled") {
+    if (row["Token Type"] !== tokenType || row.Status === "Cancelled") {
       continue;
     }
 
     const start = getSerialFromToken(row["Token Start"]);
 
-    const qty = Number(rowQuantity) || 0;
+    const qty = Number(row.Quantity) || 0;
 
     if (start > 0 && qty > 0) {
       for (let i = 0; i < qty; i++) {
@@ -911,7 +1282,39 @@ function getNextTokenSerial(
 
 
 
-   ORDER NUMBER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ORDER NUMBER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -963,7 +1366,23 @@ function getNextOrderNumber(rows) {
 
 
 
-   EXCEL ALLOCATION LOCK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   EXCEL ALLOCATION LOCK
 
 
 
@@ -995,7 +1414,6 @@ function getNextOrderNumber(rows) {
 
 
 
-   Prevents two users from receiving
 
 
 
@@ -1011,7 +1429,72 @@ function getNextOrderNumber(rows) {
 
 
 
-   the same token/order.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Prevents two users from receiving
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   the same token/order.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1059,7 +1542,39 @@ function withExcelAllocationLock(work) {
 
 
 
-   ADMIN AUTHENTICATION
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN AUTHENTICATION
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1223,7 +1738,39 @@ function requireAdmin(
 
 
 
-   GET PUBLIC ENTRIES
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   GET PUBLIC ENTRIES
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1281,7 +1828,39 @@ app.get(
 
 
 
-   CREATE ORDER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   CREATE ORDER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1455,7 +2034,23 @@ app.post(
 
 
 
-   ADMIN CREATE ORDER
+
+
+
+
+
+
+
+
+   ADMIN CREATE ORDER
+
+
+
+
+
+
+
+
 
 
 
@@ -1513,7 +2108,23 @@ app.post(
 
 
 
-   UPDATE STATUS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   UPDATE STATUS
 
 
 
@@ -1545,7 +2156,6 @@ app.post(
 
 
 
-   Complete ↔ Payment Not Received
 
 
 
@@ -1577,7 +2187,88 @@ app.post(
 
 
 
-   Cancelled cannot be changed.
+
+   Complete ↔ Payment Not Received
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Cancelled cannot be changed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1631,7 +2322,7 @@ app.post(
 
         const row = normalizeRow(rows[index]);
 
-        if (rowStatus === "Cancelled") {
+        if (row.Status === "Cancelled") {
           throw Object.assign(
             new Error("Cancelled registrations cannot be changed."),
 
@@ -1641,7 +2332,7 @@ app.post(
           );
         }
 
-        rowStatus = requested;
+        row.Status = requested;
 
         rows[index] = row;
 
@@ -1683,7 +2374,23 @@ app.post(
 
 
 
-   CANCEL ORDER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   CANCEL ORDER
 
 
 
@@ -1715,7 +2422,55 @@ app.post(
 
 
 
-   Cancelled is permanent.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Cancelled is permanent.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1741,7 +2496,6 @@ app.post(
       const orderId = String(req.params.orderId || "");
 
       const cancelPassword = String(req.body?.cancelPassword || ""); // Admin users can cancel directly from Admin Received.
-
       // Public users must provide the separate cancellation password.
 
       const header = String(req.headers.authorization || "");
@@ -1791,7 +2545,7 @@ app.post(
 
         const row = normalizeRow(rows[index]);
 
-        if (rowStatus === "Cancelled") {
+        if (row.Status === "Cancelled") {
           throw Object.assign(
             new Error("This registration is already cancelled."),
 
@@ -1801,7 +2555,7 @@ app.post(
           );
         }
 
-        rowStatus = "Cancelled";
+        row.Status = "Cancelled";
 
         row["Cancelled At"] = new Date().toLocaleString("en-IN");
 
@@ -1845,7 +2599,39 @@ app.post(
 
 
 
-   ADMIN LOGIN
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN LOGIN
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1921,7 +2707,39 @@ app.post(
 
 
 
-   ADMIN RECEIVED DASHBOARD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN RECEIVED DASHBOARD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2049,7 +2867,39 @@ app.get(
 
 
 
-   ADMIN NOTES
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN NOTES
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2137,7 +2987,39 @@ app.post(
 
 
 
-   ADMIN-ONLY EXCEL DOWNLOAD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN-ONLY EXCEL DOWNLOAD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2205,7 +3087,39 @@ app.get(
 
 
 
-   ADMIN-ONLY CLEAR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   ADMIN-ONLY CLEAR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2265,7 +3179,39 @@ app.post(
 
 
 
-   TEST
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   TEST
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2310,7 +3256,39 @@ app.get(
 
 
 
-   START SERVER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   START SERVER
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2330,11 +3308,19 @@ app.get(
 
 /* =========================================================
 
-   SPYA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
 
-   These routes are the V5 source-of-truth APIs.
 
-   Legacy Excel routes below remain unchanged.
+   SPYA V5 - POSTGRESQL TOKEN / REGISTRATION ROUTES
+
+
+
+   These routes are the V5 source-of-truth APIs.
+
+
+
+   Legacy Excel routes below remain unchanged.
+
+
 
 \========================================================= */
 
@@ -2347,17 +3333,27 @@ function getV5Bearer(req) {
 function verifyV5Token(token) {
   try {
     const [encoded, signature] = String(token || "").split(".");
+
     if (!encoded || !signature) return null;
+
     const expected = crypto
+
       .createHmac("sha256", V5_AUTH_SECRET)
+
       .update(encoded)
+
       .digest("base64url");
+
     const a = Buffer.from(signature);
+
     const b = Buffer.from(expected);
+
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
     const payload = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf8"),
     );
+
     return payload.exp && Number(payload.exp) > Date.now() ? payload : null;
   } catch (_) {
     return null;
@@ -2410,51 +3406,78 @@ function positiveInteger(value, fieldName, max = 9999) {
 }
 
 function normalizeV5RegistrationInput(body = {}) {
-  const categoryId = String(body.categoryId || "").trim();
-
-  const name = String(body.name || body.customerName || "").trim();
-
-  const email = String(body.email || body.customerEmail || "").trim();
-
-  const phone = String(body.phone || body.customerPhone || "").trim();
-
+  const categoryIds = Array.isArray(body.categoryIds)
+    ? [
+        ...new Set(
+          body.categoryIds.map((v) => String(v || "").trim()).filter(Boolean),
+        ),
+      ]
+    : [String(body.categoryId || "").trim()].filter(Boolean);
+  const rawCustomers = Array.isArray(body.customers) ? body.customers : null;
+  const names = rawCustomers
+    ? []
+    : String(body.name || body.customerName || "")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+  const phones = rawCustomers
+    ? []
+    : String(body.phone || body.customerPhone || "")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+  const emails = rawCustomers
+    ? []
+    : String(body.email || body.customerEmail || "")
+        .split(",")
+        .map((v) => v.trim());
+  const customers = rawCustomers
+    ? rawCustomers.map((c) => ({
+        name: String(c.name || "").trim(),
+        phone: String(c.phone || "").trim(),
+        email: String(c.email || "").trim(),
+      }))
+    : names.map((name, i) => ({
+        name,
+        phone: phones[i] || "",
+        email: emails[i] || "",
+      }));
   const payment = String(body.payment || body.paymentMode || "").trim();
-
-  if (!categoryId) {
-    throw Object.assign(new Error("Category is required."), {
+  if (!categoryIds.length)
+    throw Object.assign(new Error("Select at least one token category."), {
       statusCode: 400,
     });
-  }
-
-  if (!name) {
-    throw Object.assign(new Error("Customer name is required."), {
+  if (!customers.length || customers.some((c) => !c.name))
+    throw Object.assign(new Error("Enter a name for every customer."), {
       statusCode: 400,
     });
-  }
-
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw Object.assign(new Error("Enter a valid email address."), {
+  if (!rawCustomers && phones.length !== names.length)
+    throw Object.assign(
+      new Error(
+        "Enter the same number of comma-separated phone numbers as customer names.",
+      ),
+      { statusCode: 400 },
+    );
+  if (customers.some((c) => !c.phone))
+    throw Object.assign(new Error("Enter a phone number for every customer."), {
       statusCode: 400,
     });
+  for (const customer of customers) {
+    if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email))
+      throw Object.assign(
+        new Error(`Enter a valid email address for ${customer.name}.`),
+        { statusCode: 400 },
+      );
+    if (customer.phone && !/^\+?[\d\s\-()]{7,15}$/.test(customer.phone))
+      throw Object.assign(
+        new Error(`Enter a valid phone number for ${customer.name}.`),
+        { statusCode: 400 },
+      );
   }
-
-  if (phone && !/^\+?[\d\s\-()]{7,15}$/.test(phone)) {
-    throw Object.assign(new Error("Enter a valid phone number."), {
-      statusCode: 400,
-    });
-  }
-
   return {
-    categoryId,
-
+    categoryIds,
+    customers,
     quantity: positiveInteger(body.quantity, "Quantity"),
-
-    name,
-
-    email,
-
-    phone,
-
     payment,
   };
 }
@@ -2464,15 +3487,25 @@ async function getOwnedDashboard(db, dashboardId, userId) {
     await db.query(
       `SELECT *
 
-         FROM dashboards
 
-        WHERE id=$1
 
-          AND user_id=$2
+         FROM dashboards
 
-          AND archived_at IS NULL
 
-        LIMIT 1`,
+
+        WHERE id=$1
+
+
+
+          AND user_id=$2
+
+
+
+          AND archived_at IS NULL
+
+
+
+        LIMIT 1`,
 
       [dashboardId, userId],
     )
@@ -2484,13 +3517,21 @@ async function getOwnedCategory(db, dashboardId, categoryId) {
     await db.query(
       `SELECT id,dashboard_id,name,prefix,price,active
 
-         FROM token_categories
 
-        WHERE id=$1
 
-          AND dashboard_id=$2
+         FROM token_categories
 
-        LIMIT 1`,
+
+
+        WHERE id=$1
+
+
+
+          AND dashboard_id=$2
+
+
+
+        LIMIT 1`,
 
       [categoryId, dashboardId],
     )
@@ -2499,13 +3540,21 @@ async function getOwnedCategory(db, dashboardId, categoryId) {
 
 /*
 
- * Returns the smallest contiguous range of available serial numbers.
 
- * Only tokens whose status is Allocated are considered occupied.
 
- * Cancelled tokens therefore become reusable.
+ * Returns the smallest contiguous range of available serial numbers.
 
- */
+
+
+ * Only tokens whose status is Allocated are considered occupied.
+
+
+
+ * Cancelled tokens therefore become reusable.
+
+
+
+ */
 
 async function findV5AvailableSerials(
   client,
@@ -2519,15 +3568,25 @@ async function findV5AvailableSerials(
   const result = await client.query(
     `SELECT serial
 
-       FROM tokens
 
-      WHERE dashboard_id=$1
 
-        AND category_id=$2
+       FROM tokens
 
-        AND status='Allocated'
 
-      ORDER BY serial`,
+
+      WHERE dashboard_id=$1
+
+
+
+        AND category_id=$2
+
+
+
+        AND status='Allocated'
+
+
+
+      ORDER BY serial`,
 
     [dashboardId, categoryId],
   );
@@ -2555,216 +3614,177 @@ async function findV5AvailableSerials(
 
 async function createV5Registration({ dashboardId, userId, input }) {
   const db = requirePg();
-
   const client = await db.connect();
-
+  const groupId = crypto.randomUUID();
   try {
     await client.query("BEGIN");
-
-    // Serialize allocations per dashboard so two simultaneous requests
-
-    // cannot receive the same order number or token range.
-
+    // Existing deployments gain this nullable grouping column without losing registrations.
+    await client.query(
+      "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
+    );
     await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
       `SPYA-V5-DASHBOARD:${dashboardId}`,
     ]);
-
     const dashboard = await getOwnedDashboard(client, dashboardId, userId);
-
-    if (!dashboard) {
+    if (!dashboard)
       throw Object.assign(new Error("Dashboard not found."), {
         statusCode: 404,
       });
+    const categories = [];
+    for (const categoryId of input.categoryIds) {
+      const category = await getOwnedCategory(client, dashboardId, categoryId);
+      if (!category || !category.active)
+        throw Object.assign(
+          new Error(
+            "One of the selected token categories is missing or inactive.",
+          ),
+          { statusCode: 404 },
+        );
+      categories.push(category);
     }
-
-    const category = await getOwnedCategory(
-      client,
-
-      dashboardId,
-
-      input.categoryId,
-    );
-
-    if (!category || !category.active) {
-      throw Object.assign(new Error("Token category not found or inactive."), {
-        statusCode: 404,
-      });
-    }
-
     const nextOrderResult = await client.query(
-      `SELECT COALESCE(MAX(order_number),0)+1 AS next_order
-
-         FROM registrations
-
-        WHERE dashboard_id=$1`,
-
+      `SELECT COALESCE(MAX(order_number),0)+1 AS next_order FROM registrations WHERE dashboard_id=$1`,
       [dashboardId],
     );
-
     const orderNumber = Number(nextOrderResult.rows[0].next_order);
-
-    const quantity = input.quantity;
-
-    const tokenStart = await findV5AvailableSerials(
-      client,
-
-      dashboardId,
-
-      category.id,
-
-      quantity,
-    );
-
-    const tokenEnd = tokenStart + quantity - 1;
-
-    const amount = Number(category.price) * quantity;
-
-    const registrationResult = await client.query(
-      `INSERT INTO registrations
-
-        (dashboard_id,category_id,order_number,customer_name,customer_email,
-
-         customer_phone,quantity,token_start,token_end,amount,payment_mode,status)
-
-       VALUES
-
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Complete')
-
-       RETURNING *`,
-
-      [
+    const categoryEntries = [];
+    for (const category of categories) {
+      const quantity = input.quantity;
+      const tokenStart = await findV5AvailableSerials(
+        client,
         dashboardId,
-
         category.id,
-
-        orderNumber,
-
-        input.name,
-
-        input.email || null,
-
-        input.phone || null,
-
         quantity,
-
-        tokenStart,
-
-        tokenEnd,
-
-        amount,
-
-        input.payment || null,
-      ],
-    );
-
-    const registration = registrationResult.rows[0];
-
-    // Reuse cancelled token rows where possible; otherwise create new rows.
-
-    for (let serial = tokenStart; serial <= tokenEnd; serial += 1) {
-      const existing = (
-        await client.query(
-          `SELECT id
-
-             FROM tokens
-
-            WHERE dashboard_id=$1
-
-              AND category_id=$2
-
-              AND serial=$3
-
-            LIMIT 1`,
-
-          [dashboardId, category.id, serial],
-        )
-      ).rows[0];
-
-      if (existing) {
-        await client.query(
-          `UPDATE tokens
-
-              SET registration_id=$1,
-
-                  status='Allocated',
-
-                  created_at=NOW()
-
-            WHERE id=$2`,
-
-          [registration.id, existing.id],
-        );
-      } else {
-        await client.query(
-          `INSERT INTO tokens
-
-            (dashboard_id,category_id,serial,registration_id,status)
-
-           VALUES ($1,$2,$3,$4,'Allocated')`,
-
-          [dashboardId, category.id, serial, registration.id],
-        );
+      );
+      const tokenEnd = tokenStart + quantity - 1;
+      const amount = Number(category.price) * quantity;
+      const registrationResult = await client.query(
+        `INSERT INTO registrations
+          (dashboard_id,category_id,order_number,customer_name,customer_email,customer_phone,quantity,token_start,token_end,amount,payment_mode,status,registration_group_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Complete',$12) RETURNING *`,
+        [
+          dashboardId,
+          category.id,
+          orderNumber,
+          input.customer.name,
+          input.customer.email || null,
+          input.customer.phone || null,
+          quantity,
+          tokenStart,
+          tokenEnd,
+          amount,
+          input.payment || null,
+          groupId,
+        ],
+      );
+      const registration = registrationResult.rows[0];
+      for (let serial = tokenStart; serial <= tokenEnd; serial += 1) {
+        const existing = (
+          await client.query(
+            `SELECT id FROM tokens WHERE dashboard_id=$1 AND category_id=$2 AND serial=$3 LIMIT 1`,
+            [dashboardId, category.id, serial],
+          )
+        ).rows[0];
+        if (existing) {
+          await client.query(
+            `UPDATE tokens SET registration_id=$1,status='Allocated',created_at=NOW() WHERE id=$2`,
+            [registration.id, existing.id],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO tokens (dashboard_id,category_id,serial,registration_id,status) VALUES ($1,$2,$3,$4,'Allocated')`,
+            [dashboardId, category.id, serial, registration.id],
+          );
+        }
       }
+      categoryEntries.push({
+        id: registration.id,
+        groupId,
+        orderId: `ORD${String(orderNumber).padStart(4, "0")}`,
+        orderNumber,
+        dashboardId,
+        categoryId: category.id,
+        tokenType: category.name,
+        categoryName: category.name,
+        prefix: category.prefix,
+        quantity,
+        tokenStart: `${category.prefix}${String(tokenStart).padStart(4, "0")}`,
+        tokenEnd: `${category.prefix}${String(tokenEnd).padStart(4, "0")}`,
+        name: registration.customer_name,
+        email: registration.customer_email || "",
+        phone: registration.customer_phone || "",
+        payment: registration.payment_mode || "",
+        amount: Number(registration.amount),
+        status: registration.status,
+        cancelledAt: registration.cancelled_at,
+        adminNotes: registration.admin_notes || "",
+        date: new Date(registration.created_at).toLocaleDateString("en-IN"),
+        time: new Date(registration.created_at).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        createdAt: registration.created_at,
+      });
     }
-
     await client.query("COMMIT");
-
-    return {
-      id: registration.id,
-
-      orderId: `ORD${String(orderNumber).padStart(4, "0")}`,
-
-      orderNumber,
-
-      dashboardId,
-
-      categoryId: category.id,
-
-      tokenType: category.name,
-
-      categoryName: category.name,
-
-      prefix: category.prefix,
-
-      quantity,
-
-      tokenStart: `${category.prefix}${String(tokenStart).padStart(4, "0")}`,
-
-      tokenEnd: `${category.prefix}${String(tokenEnd).padStart(4, "0")}`,
-
-      name: registration.customer_name,
-
-      email: registration.customer_email || "",
-
-      phone: registration.customer_phone || "",
-
-      payment: registration.payment_mode || "",
-
-      amount: Number(registration.amount),
-
-      status: registration.status,
-
-      cancelledAt: registration.cancelled_at,
-
-      adminNotes: registration.admin_notes || "",
-
-      date: new Date(registration.created_at).toLocaleDateString("en-IN"),
-
-      time: new Date(registration.created_at).toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-
-        minute: "2-digit",
-      }),
-
-      createdAt: registration.created_at,
-    };
+    return combineV5RegistrationEntries(categoryEntries);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
-
     throw error;
   } finally {
     client.release();
   }
+}
+
+function combineV5RegistrationEntries(entries) {
+  if (!entries.length) return null;
+  const first = entries[0];
+  const categories = entries.map((e) => ({
+    id: e.id,
+    categoryId: e.categoryId,
+    categoryName: e.categoryName,
+    prefix: e.prefix,
+    quantity: e.quantity,
+    tokenStart: e.tokenStart,
+    tokenEnd: e.tokenEnd,
+    amount: Number(e.amount),
+    status: e.status,
+  }));
+  const activeCategories = categories.filter((c) => c.status !== "Cancelled");
+  const visibleCategories = activeCategories.length
+    ? activeCategories
+    : categories;
+  const tokenLabels = visibleCategories.map((c) =>
+    c.tokenStart === c.tokenEnd
+      ? c.tokenStart
+      : `${c.tokenStart}–${c.tokenEnd}`,
+  );
+  const hasCancelled = categories.some((c) => c.status === "Cancelled");
+  const hasActive = activeCategories.length > 0;
+  return {
+    ...first,
+    id: first.id,
+    groupId: first.groupId || first.id,
+    categoryId: (activeCategories[0] || categories[0]).categoryId,
+    categoryIds: activeCategories.map((c) => c.categoryId),
+    categoryName: visibleCategories.map((c) => c.categoryName).join(" + "),
+    tokenType: visibleCategories.map((c) => c.categoryName).join(" + "),
+    prefix: visibleCategories.map((c) => c.prefix).join(" + "),
+    tokenStart: tokenLabels.join(" + "),
+    tokenEnd: tokenLabels.join(" + "),
+    categoryEntries: categories,
+    quantity: Number(first.quantity),
+    amount: entries
+      .filter((e) => e.status !== "Cancelled")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0),
+    status: !hasActive
+      ? "Cancelled"
+      : hasCancelled
+        ? "Partially Cancelled"
+        : entries.some((e) => e.status === "Payment Not Received")
+          ? "Payment Not Received"
+          : "Complete",
+  };
 }
 
 async function mapV5Registration(db, row) {
@@ -2772,11 +3792,17 @@ async function mapV5Registration(db, row) {
     await db.query(
       `SELECT name,prefix
 
-         FROM token_categories
 
-        WHERE id=$1
 
-        LIMIT 1`,
+         FROM token_categories
+
+
+
+        WHERE id=$1
+
+
+
+        LIMIT 1`,
 
       [row.category_id],
     )
@@ -2786,6 +3812,8 @@ async function mapV5Registration(db, row) {
 
   return {
     id: row.id,
+
+    groupId: row.registration_group_id || row.id,
 
     orderId: `ORD${String(row.order_number).padStart(4, "0")}`,
 
@@ -2860,11 +3888,17 @@ app.get(
         await db.query(
           `SELECT id,name,prefix,price,active,created_at,updated_at
 
-             FROM token_categories
 
-            WHERE dashboard_id=$1
 
-            ORDER BY created_at`,
+             FROM token_categories
+
+
+
+            WHERE dashboard_id=$1
+
+
+
+            ORDER BY created_at`,
 
           [dashboard.id],
         )
@@ -2883,7 +3917,11 @@ app.get(
 
 /* ---------------------------------------------------------
 
-   GET USER REGISTRATIONS
+
+
+   GET USER REGISTRATIONS
+
+
 
 \--------------------------------------------------------- */
 
@@ -2912,22 +3950,36 @@ app.get(
         await db.query(
           `SELECT *
 
-             FROM registrations
 
-            WHERE dashboard_id=$1
 
-            ORDER BY created_at DESC`,
+             FROM registrations
+
+
+
+            WHERE dashboard_id=$1
+
+
+
+            ORDER BY created_at DESC`,
 
           [dashboard.id],
         )
       ).rows;
 
-      const entries = [];
-
-      for (const row of rows) {
-        entries.push(await mapV5Registration(db, row));
+      const mapped = [];
+      for (const row of rows) mapped.push(await mapV5Registration(db, row));
+      const groups = new Map();
+      for (const entry of mapped) {
+        const key = entry.groupId || entry.id;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
       }
-
+      const entries = [...groups.values()].map((items) =>
+        items.length > 1 ? combineV5RegistrationEntries(items) : items[0],
+      );
+      entries.sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+      );
       res.json({ success: true, entries });
     } catch (error) {
       console.error("V5 registrations list error:", error);
@@ -2941,7 +3993,11 @@ app.get(
 
 /* ---------------------------------------------------------
 
-   CREATE USER REGISTRATION
+
+
+   CREATE USER REGISTRATION
+
+
 
 \--------------------------------------------------------- */
 
@@ -2953,16 +4009,17 @@ app.post(
   async (req, res) => {
     try {
       const input = normalizeV5RegistrationInput(req.body || {});
-
-      const entry = await createV5Registration({
-        dashboardId: req.params.dashboardId,
-
-        userId: req.v5UserId,
-
-        input,
-      });
-
-      res.status(201).json({ success: true, entry });
+      const entries = [];
+      for (const customer of input.customers) {
+        entries.push(
+          await createV5Registration({
+            dashboardId: req.params.dashboardId,
+            userId: req.v5UserId,
+            input: { ...input, customer },
+          }),
+        );
+      }
+      res.status(201).json({ success: true, entries, entry: entries[0] });
     } catch (error) {
       console.error("V5 create registration error:", error);
 
@@ -2975,203 +4032,169 @@ app.post(
 
 /* ---------------------------------------------------------
 
-   UPDATE STATUS
 
-   Complete <-> Payment Not Received
 
-   Cancelled is permanent.
+   UPDATE STATUS
+
+
+
+   Complete <-> Payment Not Received
+
+
+
+   Cancelled is permanent.
+
+
 
 \--------------------------------------------------------- */
 
+/* ---------------------------------------------------------
+   UPDATE STATUS
+   Complete <-> Payment Not Received; apply to every category row for the combined token.
+--------------------------------------------------------- */
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/status",
-
   requireV5UserRoute,
-
   async (req, res) => {
     try {
       const requested = String(req.body?.status || "").trim();
-
-      if (!["Complete", "Payment Not Received"].includes(requested)) {
-        return res.status(400).json({
-          error: "Status must be Complete or Payment Not Received.",
-        });
-      }
-
+      if (!["Complete", "Payment Not Received"].includes(requested))
+        return res
+          .status(400)
+          .json({ error: "Status must be Complete or Payment Not Received." });
       const db = requirePg();
-
+      await db.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
+      );
       const dashboard = await getOwnedDashboard(
         db,
-
         req.params.dashboardId,
-
         req.v5UserId,
       );
-
-      if (!dashboard) {
+      if (!dashboard)
         return res.status(404).json({ error: "Dashboard not found." });
-      }
-
+      const target = (
+        await db.query(
+          "SELECT * FROM registrations WHERE id=$1 AND dashboard_id=$2 LIMIT 1",
+          [req.params.registrationId, dashboard.id],
+        )
+      ).rows[0];
+      if (!target || target.status === "Cancelled")
+        return res
+          .status(404)
+          .json({
+            error: "Registration not found or it is already cancelled.",
+          });
+      const groupId = target.registration_group_id || target.id;
       const result = await db.query(
-        `UPDATE registrations
-
-            SET status=$1
-
-          WHERE id=$2
-
-            AND dashboard_id=$3
-
-            AND status <> 'Cancelled'
-
-        RETURNING *`,
-
-        [requested, req.params.registrationId, dashboard.id],
+        `UPDATE registrations SET status=$1 WHERE dashboard_id=$2 AND status <> 'Cancelled' AND COALESCE(registration_group_id::text,id::text)=$3 RETURNING *`,
+        [requested, dashboard.id, String(groupId)],
       );
-
-      if (!result.rows[0]) {
-        return res.status(404).json({
-          error: "Registration not found or it is already cancelled.",
-        });
-      }
-
+      const mapped = [];
+      for (const row of result.rows)
+        mapped.push(await mapV5Registration(db, row));
       res.json({
         success: true,
-
-        entry: await mapV5Registration(db, result.rows[0]),
+        entry:
+          mapped.length > 1 ? combineV5RegistrationEntries(mapped) : mapped[0],
       });
     } catch (error) {
       console.error("V5 status update error:", error);
-
-      res.status(error.statusCode || 500).json({
-        error: error.message || "Failed to update status.",
-      });
+      res
+        .status(error.statusCode || 500)
+        .json({ error: error.message || "Failed to update status." });
     }
   },
 );
 
 /* ---------------------------------------------------------
-
    CANCEL REGISTRATION
-
-   Cancellation makes its token numbers reusable.
-
-\--------------------------------------------------------- */
-
+   Cancellation makes every category serial in a combined token reusable.
+--------------------------------------------------------- */
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/cancel",
-
   requireV5UserRoute,
-
   async (req, res) => {
     const db = requirePg();
-
     const client = await db.connect();
-
     try {
       await client.query("BEGIN");
-
+      await client.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
+      );
       await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
         `SPYA-V5-DASHBOARD:${req.params.dashboardId}`,
       ]);
-
       const dashboard = await getOwnedDashboard(
         client,
-
         req.params.dashboardId,
-
         req.v5UserId,
       );
-
       if (!dashboard) {
         await client.query("ROLLBACK");
-
         return res.status(404).json({ error: "Dashboard not found." });
       }
-
-      const registration = (
+      const target = (
         await client.query(
-          `SELECT *
-
-             FROM registrations
-
-            WHERE id=$1
-
-              AND dashboard_id=$2
-
-            LIMIT 1`,
-
+          "SELECT * FROM registrations WHERE id=$1 AND dashboard_id=$2 LIMIT 1",
           [req.params.registrationId, dashboard.id],
         )
       ).rows[0];
-
-      if (!registration) {
+      if (!target) {
         await client.query("ROLLBACK");
-
         return res.status(404).json({ error: "Registration not found." });
       }
-
-      if (registration.status === "Cancelled") {
+      if (target.status === "Cancelled") {
         await client.query("ROLLBACK");
-
-        return res.status(400).json({
-          error: "This registration is already cancelled.",
-        });
+        return res
+          .status(400)
+          .json({ error: "This registration is already cancelled." });
       }
-
+      const groupId = String(target.registration_group_id || target.id);
       const updated = (
         await client.query(
-          `UPDATE registrations
-
-              SET status='Cancelled',
-
-                  cancelled_at=NOW()
-
-            WHERE id=$1
-
-            RETURNING *`,
-
-          [registration.id],
+          `UPDATE registrations SET status='Cancelled', cancelled_at=NOW() WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
+          [target.id, dashboard.id],
         )
-      ).rows[0];
-
+      ).rows;
+      if (!updated.length) {
+        await client.query("ROLLBACK");
+        return res
+          .status(400)
+          .json({ error: "This category is already cancelled." });
+      }
       await client.query(
-        `UPDATE tokens
-
-            SET status='Cancelled'
-
-          WHERE registration_id=$1`,
-
-        [registration.id],
+        `UPDATE tokens SET status='Cancelled' WHERE registration_id=$1`,
+        [target.id],
       );
-
+      const groupRows = (
+        await client.query(
+          `SELECT * FROM registrations WHERE dashboard_id=$1 AND COALESCE(registration_group_id::text,id::text)=$2 ORDER BY created_at ASC, order_number ASC`,
+          [dashboard.id, groupId],
+        )
+      ).rows;
       await client.query("COMMIT");
-
+      const mapped = [];
+      for (const row of groupRows)
+        mapped.push(await mapV5Registration(db, row));
       res.json({
         success: true,
-
-        message: "Registration cancelled. Its token numbers are now reusable.",
-
-        entry: await mapV5Registration(db, updated),
+        message:
+          "Category cancelled. Other categories remain active; its token number is now reusable.",
+        entry:
+          mapped.length > 1 ? combineV5RegistrationEntries(mapped) : mapped[0],
       });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
-
       console.error("V5 cancellation error:", error);
-
-      res.status(error.statusCode || 500).json({
-        error: error.message || "Failed to cancel registration.",
-      });
+      res
+        .status(error.statusCode || 500)
+        .json({ error: error.message || "Failed to cancel registration." });
     } finally {
       client.release();
     }
   },
 );
-
-/* ---------------------------------------------------------
-
-   ADMIN REGISTRATIONS
-
-\--------------------------------------------------------- */
 
 app.get(
   "/api/v5/admin/dashboards/:dashboardId/registrations",
@@ -3186,15 +4209,25 @@ app.get(
         await db.query(
           `SELECT *
 
-             FROM dashboards
 
-            WHERE id=$1
 
-              AND user_id=$2
+             FROM dashboards
 
-              AND archived_at IS NULL
 
-            LIMIT 1`,
+
+            WHERE id=$1
+
+
+
+              AND user_id=$2
+
+
+
+              AND archived_at IS NULL
+
+
+
+            LIMIT 1`,
 
           [req.params.dashboardId, req.v5AdminUserId],
         )
@@ -3208,68 +4241,82 @@ app.get(
         await db.query(
           `SELECT *
 
-             FROM registrations
 
-            WHERE dashboard_id=$1
 
-            ORDER BY created_at DESC`,
+             FROM registrations
+
+
+
+            WHERE dashboard_id=$1
+
+
+
+            ORDER BY created_at DESC`,
 
           [dashboard.id],
         )
       ).rows;
 
-      const entries = [];
-
-      for (const row of rows) {
-        entries.push(await mapV5Registration(db, row));
+      const mapped = [];
+      for (const row of rows) mapped.push(await mapV5Registration(db, row));
+      const groups = new Map();
+      for (const entry of mapped) {
+        const key = entry.groupId || entry.id;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
       }
+      const entries = [...groups.values()].map((items) =>
+        items.length > 1 ? combineV5RegistrationEntries(items) : items[0],
+      );
+      entries.sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+      );
 
+      const categoryRows = entries.flatMap((entry) =>
+        Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
+          ? entry.categoryEntries.map((categoryEntry) => ({
+              ...categoryEntry,
+              customerName: entry.name,
+              groupStatus: entry.status,
+            }))
+          : [{ ...entry, customerName: entry.name, groupStatus: entry.status }],
+      );
+      const activeCategoryRows = categoryRows.filter(
+        (row) => row.status !== "Cancelled",
+      );
       const summary = {
         totalOrders: entries.length,
-
-        totalTokens: entries.reduce((sum, e) => sum + e.quantity, 0),
-
-        completedOrders: entries.filter((e) => e.status === "Complete").length,
-
-        completedTokens: entries
-
-          .filter((e) => e.status === "Complete")
-
-          .reduce((sum, e) => sum + e.quantity, 0),
-
+        totalTokens: activeCategoryRows.reduce(
+          (sum, row) => sum + Number(row.quantity || 0),
+          0,
+        ),
+        completedOrders: entries.filter((entry) => entry.status === "Complete")
+          .length,
+        completedTokens: activeCategoryRows
+          .filter((row) => row.status === "Complete")
+          .reduce((sum, row) => sum + Number(row.quantity || 0), 0),
         paymentNotReceivedOrders: entries.filter(
-          (e) => e.status === "Payment Not Received",
+          (entry) => entry.status === "Payment Not Received",
         ).length,
-
-        paymentNotReceivedTokens: entries
-
-          .filter((e) => e.status === "Payment Not Received")
-
-          .reduce((sum, e) => sum + e.quantity, 0),
-
-        cancelledOrders: entries.filter((e) => e.status === "Cancelled").length,
-
-        cancelledTokens: entries
-
-          .filter((e) => e.status === "Cancelled")
-
-          .reduce((sum, e) => sum + e.quantity, 0),
-
-        totalAmountReceived: entries
-
-          .filter((e) => e.status === "Complete")
-
-          .reduce((sum, e) => sum + e.amount, 0),
-
+        paymentNotReceivedTokens: activeCategoryRows
+          .filter((row) => row.status === "Payment Not Received")
+          .reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+        cancelledOrders: entries.filter((entry) => entry.status === "Cancelled")
+          .length,
+        cancelledTokens: categoryRows
+          .filter((row) => row.status === "Cancelled")
+          .reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+        totalAmountReceived: activeCategoryRows
+          .filter((row) => row.status === "Complete")
+          .reduce((sum, row) => sum + Number(row.amount || 0), 0),
         amountReceivedByCategory: {},
       };
 
-      for (const entry of entries) {
-        if (entry.status !== "Complete") continue;
-
-        summary.amountReceivedByCategory[entry.categoryName] =
-          (summary.amountReceivedByCategory[entry.categoryName] || 0) +
-          entry.amount;
+      for (const categoryEntry of activeCategoryRows) {
+        if (categoryEntry.status !== "Complete") continue;
+        summary.amountReceivedByCategory[categoryEntry.categoryName] =
+          (summary.amountReceivedByCategory[categoryEntry.categoryName] || 0) +
+          Number(categoryEntry.amount || 0);
       }
 
       res.json({
@@ -3293,199 +4340,145 @@ app.get(
 
 /* ---------------------------------------------------------
 
-   ADMIN STATUS
+
+
+   ADMIN STATUS
+
+
 
 \--------------------------------------------------------- */
 
 app.post(
   "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/status",
-
   requireV5AdminRoute,
-
   async (req, res) => {
     try {
       const requested = String(req.body?.status || "").trim();
-
-      if (!["Complete", "Payment Not Received"].includes(requested)) {
-        return res.status(400).json({
-          error: "Status must be Complete or Payment Not Received.",
-        });
-      }
-
+      if (!["Complete", "Payment Not Received"].includes(requested))
+        return res
+          .status(400)
+          .json({ error: "Status must be Complete or Payment Not Received." });
       const db = requirePg();
-
-      const result = await db.query(
-        `UPDATE registrations r
-
-            SET status=$1
-
-           FROM dashboards d
-
-          WHERE r.id=$2
-
-            AND r.dashboard_id=$3
-
-            AND d.id=r.dashboard_id
-
-            AND d.user_id=$4
-
-            AND d.archived_at IS NULL
-
-            AND r.status <> 'Cancelled'
-
-        RETURNING r.*`,
-
-        [
-          requested,
-
-          req.params.registrationId,
-
-          req.params.dashboardId,
-
-          req.v5AdminUserId,
-        ],
+      await db.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
       );
-
-      if (!result.rows[0]) {
-        return res.status(404).json({
-          error: "Registration not found or it is already cancelled.",
-        });
-      }
-
-      res.json({
-        success: true,
-
-        entry: await mapV5Registration(db, result.rows[0]),
-      });
-    } catch (error) {
-      console.error("V5 admin status error:", error);
-
-      res.status(error.statusCode || 500).json({
-        error: error.message || "Failed to update status.",
-      });
-    }
-  },
-);
-
-/* ---------------------------------------------------------
-
-   ADMIN CANCEL
-
-\--------------------------------------------------------- */
-
-app.post(
-  "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/cancel",
-
-  requireV5AdminRoute,
-
-  async (req, res) => {
-    const db = requirePg();
-
-    const client = await db.connect();
-
-    try {
-      await client.query("BEGIN");
-
-      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `SPYA-V5-DASHBOARD:${req.params.dashboardId}`,
-      ]);
-
-      const registration = (
-        await client.query(
-          `SELECT r.*
-
-             FROM registrations r
-
-             JOIN dashboards d ON d.id=r.dashboard_id
-
-            WHERE r.id=$1
-
-              AND r.dashboard_id=$2
-
-              AND d.user_id=$3
-
-              AND d.archived_at IS NULL
-
-            LIMIT 1`,
-
+      const target = (
+        await db.query(
+          `SELECT r.* FROM registrations r JOIN dashboards d ON d.id=r.dashboard_id WHERE r.id=$1 AND r.dashboard_id=$2 AND d.user_id=$3 AND d.archived_at IS NULL LIMIT 1`,
           [
             req.params.registrationId,
-
             req.params.dashboardId,
-
             req.v5AdminUserId,
           ],
         )
       ).rows[0];
-
-      if (!registration) {
-        await client.query("ROLLBACK");
-
-        return res.status(404).json({ error: "Registration not found." });
-      }
-
-      if (registration.status === "Cancelled") {
-        await client.query("ROLLBACK");
-
-        return res.status(400).json({
-          error: "This registration is already cancelled.",
-        });
-      }
-
-      const updated = (
-        await client.query(
-          `UPDATE registrations
-
-              SET status='Cancelled',
-
-                  cancelled_at=NOW()
-
-            WHERE id=$1
-
-            RETURNING *`,
-
-          [registration.id],
-        )
-      ).rows[0];
-
-      await client.query(
-        `UPDATE tokens
-
-            SET status='Cancelled'
-
-          WHERE registration_id=$1`,
-
-        [registration.id],
+      if (!target || target.status === "Cancelled")
+        return res
+          .status(404)
+          .json({
+            error: "Registration not found or it is already cancelled.",
+          });
+      const groupId = String(target.registration_group_id || target.id);
+      const result = await db.query(
+        `UPDATE registrations SET status=$1 WHERE dashboard_id=$2 AND status <> 'Cancelled' AND COALESCE(registration_group_id::text,id::text)=$3 RETURNING *`,
+        [requested, req.params.dashboardId, groupId],
       );
-
-      await client.query("COMMIT");
-
+      const mapped = [];
+      for (const row of result.rows)
+        mapped.push(await mapV5Registration(db, row));
       res.json({
         success: true,
+        entry:
+          mapped.length > 1 ? combineV5RegistrationEntries(mapped) : mapped[0],
+      });
+    } catch (error) {
+      console.error("V5 admin status error:", error);
+      res
+        .status(error.statusCode || 500)
+        .json({ error: error.message || "Failed to update status." });
+    }
+  },
+);
 
-        message: "Registration cancelled. Its token numbers are now reusable.",
-
-        entry: await mapV5Registration(db, updated),
+app.post(
+  "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/cancel",
+  requireV5AdminRoute,
+  async (req, res) => {
+    const db = requirePg();
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registration_group_id UUID",
+      );
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `SPYA-V5-DASHBOARD:${req.params.dashboardId}`,
+      ]);
+      const target = (
+        await client.query(
+          `SELECT r.* FROM registrations r JOIN dashboards d ON d.id=r.dashboard_id WHERE r.id=$1 AND r.dashboard_id=$2 AND d.user_id=$3 AND d.archived_at IS NULL LIMIT 1`,
+          [
+            req.params.registrationId,
+            req.params.dashboardId,
+            req.v5AdminUserId,
+          ],
+        )
+      ).rows[0];
+      if (!target) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Registration not found." });
+      }
+      if (target.status === "Cancelled") {
+        await client.query("ROLLBACK");
+        return res
+          .status(400)
+          .json({ error: "This registration is already cancelled." });
+      }
+      const groupId = String(target.registration_group_id || target.id);
+      const updated = (
+        await client.query(
+          `UPDATE registrations SET status='Cancelled',cancelled_at=NOW() WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
+          [target.id, req.params.dashboardId],
+        )
+      ).rows;
+      if (!updated.length) {
+        await client.query("ROLLBACK");
+        return res
+          .status(400)
+          .json({ error: "This category is already cancelled." });
+      }
+      await client.query(
+        `UPDATE tokens SET status='Cancelled' WHERE registration_id=$1`,
+        [target.id],
+      );
+      const groupRows = (
+        await client.query(
+          `SELECT r.* FROM registrations r JOIN dashboards d ON d.id=r.dashboard_id WHERE r.dashboard_id=$1 AND COALESCE(r.registration_group_id::text,r.id::text)=$2 AND d.user_id=$3 ORDER BY r.created_at ASC,r.order_number ASC`,
+          [req.params.dashboardId, groupId, req.v5AdminUserId],
+        )
+      ).rows;
+      await client.query("COMMIT");
+      const mapped = [];
+      for (const row of groupRows)
+        mapped.push(await mapV5Registration(db, row));
+      res.json({
+        success: true,
+        message:
+          "Category cancelled. Other categories remain active; its token number is now reusable.",
+        entry:
+          mapped.length > 1 ? combineV5RegistrationEntries(mapped) : mapped[0],
       });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
-
       console.error("V5 admin cancellation error:", error);
-
-      res.status(error.statusCode || 500).json({
-        error: error.message || "Failed to cancel registration.",
-      });
+      res
+        .status(error.statusCode || 500)
+        .json({ error: error.message || "Failed to cancel registration." });
     } finally {
       client.release();
     }
   },
 );
-
-/* ---------------------------------------------------------
-
-   ADMIN NOTES
-
-\--------------------------------------------------------- */
 
 app.post(
   "/api/v5/admin/dashboards/:dashboardId/registrations/:registrationId/notes",
@@ -3501,21 +4494,37 @@ app.post(
       const result = await db.query(
         `UPDATE registrations r
 
-            SET admin_notes=$1
 
-           FROM dashboards d
 
-          WHERE r.id=$2
+            SET admin_notes=$1
 
-            AND r.dashboard_id=$3
 
-            AND d.id=r.dashboard_id
 
-            AND d.user_id=$4
+           FROM dashboards d
 
-            AND d.archived_at IS NULL
 
-        RETURNING r.*`,
+
+          WHERE r.id=$2
+
+
+
+            AND r.dashboard_id=$3
+
+
+
+            AND d.id=r.dashboard_id
+
+
+
+            AND d.user_id=$4
+
+
+
+            AND d.archived_at IS NULL
+
+
+
+        RETURNING r.*`,
 
         [
           notes,
@@ -3549,11 +4558,19 @@ app.post(
 
 /* ---------------------------------------------------------
 
-   ADMIN EXCEL EXPORT
 
-   PostgreSQL remains the source of truth.
 
-   Excel is only an export.
+   ADMIN EXCEL EXPORT
+
+
+
+   PostgreSQL remains the source of truth.
+
+
+
+   Excel is only an export.
+
+
 
 \--------------------------------------------------------- */
 
@@ -3570,15 +4587,25 @@ app.get(
         await db.query(
           `SELECT id,association_name
 
-             FROM dashboards
 
-            WHERE id=$1
 
-              AND user_id=$2
+             FROM dashboards
 
-              AND archived_at IS NULL
 
-            LIMIT 1`,
+
+            WHERE id=$1
+
+
+
+              AND user_id=$2
+
+
+
+              AND archived_at IS NULL
+
+
+
+            LIMIT 1`,
 
           [req.params.dashboardId, req.v5AdminUserId],
         )
@@ -3592,43 +4619,81 @@ app.get(
         await db.query(
           `SELECT
 
-             r.order_number,
 
-             c.name AS category_name,
 
-             c.prefix,
+             r.order_number,
 
-             r.quantity,
 
-             r.token_start,
 
-             r.token_end,
+             c.name AS category_name,
 
-             r.customer_name,
 
-             r.customer_email,
 
-             r.customer_phone,
+             c.prefix,
 
-             r.payment_mode,
 
-             r.amount,
 
-             r.status,
+             r.quantity,
 
-             r.cancelled_at,
 
-             r.admin_notes,
 
-             r.created_at
+             r.token_start,
 
-           FROM registrations r
 
-           JOIN token_categories c ON c.id=r.category_id
 
-          WHERE r.dashboard_id=$1
+             r.token_end,
 
-          ORDER BY r.created_at DESC`,
+
+
+             r.customer_name,
+
+
+
+             r.customer_email,
+
+
+
+             r.customer_phone,
+
+
+
+             r.payment_mode,
+
+
+
+             r.amount,
+
+
+
+             r.status,
+
+
+
+             r.cancelled_at,
+
+
+
+             r.admin_notes,
+
+
+
+             r.created_at
+
+
+
+           FROM registrations r
+
+
+
+           JOIN token_categories c ON c.id=r.category_id
+
+
+
+          WHERE r.dashboard_id=$1
+
+
+
+          ORDER BY r.created_at DESC`,
 
           [dashboard.id],
         )
