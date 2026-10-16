@@ -3155,7 +3155,6 @@ export default function App() {
   const [entries, setEntries] = useState([]);
   const [screen, setScreen] = useState("dashboards");
   const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [successEntry, setSuccessEntry] = useState(null);
 
   async function loadAccount() {
@@ -3225,6 +3224,19 @@ export default function App() {
     setScreen("dashboards");
   }
 
+  function openAdminReceived(returnTo) {
+    setAdminReturnScreen(returnTo);
+    if (!auth?.adminUsername) {
+      setScreen("admin-setup");
+      return;
+    }
+    if (getAdminToken()) {
+      setScreen("admin");
+      return;
+    }
+    setScreen("admin-login");
+  }
+
   if (loading) {
     return (
       <>
@@ -3290,13 +3302,64 @@ export default function App() {
               <AdminCredentialsSetup
                 onDone={async () => {
                   sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-                  await loadAccount();
-                  setScreen(adminReturnScreen);
+                  try {
+                    const me = await getMe();
+                    setAuth(me);
+                    setDashboards(me.dashboards || []);
+                    setScreen("admin-login");
+                  } catch (e) {
+                    alert(
+                      `Admin credentials were created, but account details could not be refreshed: ${e.message}`,
+                    );
+                    setScreen(adminReturnScreen);
+                  }
                 }}
                 onSkip={() => {
                   sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
                   setScreen(adminReturnScreen);
                 }}
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (screen === "admin-login") {
+    return (
+      <>
+        <style>{css}</style>
+        <div style={styles.page}>
+          <div
+            className="spya-container"
+            style={{ ...styles.container, paddingTop: 24, paddingBottom: 48 }}
+          >
+            <button
+              type="button"
+              onClick={() => setScreen(adminReturnScreen)}
+              style={{
+                ...styles.button,
+                background: "transparent",
+                color: "#64748b",
+                paddingLeft: 0,
+              }}
+            >
+              ← Back
+            </button>
+            <div
+              style={{
+                ...styles.card,
+                padding: 24,
+                marginTop: 12,
+                maxWidth: 520,
+                marginLeft: "auto",
+                marginRight: "auto",
+              }}
+            >
+              <AdminLoginModal
+                onClose={() => setScreen(adminReturnScreen)}
+                onSuccess={() => setScreen("admin")}
               />
             </div>
           </div>
@@ -3418,13 +3481,7 @@ export default function App() {
               );
             }
           }}
-          onAdmin={() => {
-            setAdminReturnScreen("dashboard");
-            setShowAdminLogin(false);
-            if (!auth.adminUsername) setScreen("admin-setup");
-            else if (getAdminToken()) setScreen("admin");
-            else setShowAdminLogin(true);
-          }}
+          onAdmin={() => openAdminReceived("dashboard")}
         />
         {successEntry && (
           <SuccessModal
@@ -3483,25 +3540,9 @@ export default function App() {
         hasAdmin={!!auth.adminUsername}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
-        onAdmin={() => {
-          setAdminReturnScreen("dashboards");
-          setShowAdminLogin(false);
-          if (!auth.adminUsername) setScreen("admin-setup");
-          else if (getAdminToken()) setScreen("admin");
-          else setShowAdminLogin(true);
-        }}
+        onAdmin={() => openAdminReceived("dashboards")}
         onLogout={logout}
       />
-
-      {showAdminLogin && (
-        <AdminLoginModal
-          onClose={() => setShowAdminLogin(false)}
-          onSuccess={() => {
-            setShowAdminLogin(false);
-            setScreen("admin");
-          }}
-        />
-      )}
     </>
   );
 }
