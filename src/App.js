@@ -998,6 +998,7 @@ function DashboardHome({
   onLogout,
   user,
   hasAdmin,
+  canCreateDashboard,
   onAdmin,
 }) {
   return (
@@ -1126,7 +1127,7 @@ function DashboardHome({
             </button>
           ))}
 
-          {dashboards.length < 2 && (
+          {canCreateDashboard && dashboards.length < 2 && (
             <button
               onClick={onCreate}
               style={{
@@ -2862,6 +2863,12 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (auth && screen === "create-dashboard" && auth.user?.role !== "owner") {
+      setScreen("dashboards");
+    }
+  }, [auth, screen]);
+
   async function openDashboard(dashboard) {
     try {
       setLoading(true);
@@ -2944,7 +2951,7 @@ export default function App() {
     );
   }
 
-  if (screen === "admin" && auth.user?.role !== "user") {
+  if (screen === "admin" && auth.user?.role === "owner") {
     return (
       <>
         <style>{css}</style>
@@ -2957,7 +2964,7 @@ export default function App() {
     );
   }
 
-  if (screen === "create-dashboard") {
+  if (screen === "create-dashboard" && auth.user?.role === "owner") {
     return (
       <>
         <style>{css}</style>
@@ -3070,7 +3077,7 @@ export default function App() {
               );
             }
           }}
-          isOwner={auth.user?.role !== "user"}
+          isOwner={auth.user?.role === "owner"}
         />
         {successEntry && (
           <SuccessModal
@@ -3091,7 +3098,8 @@ export default function App() {
         dashboards={dashboards}
         selected={selectedDashboard}
         user={auth.user}
-        hasAdmin={auth.user?.role !== "user"}
+        hasAdmin={auth.user?.role === "owner"}
+        canCreateDashboard={auth.user?.role === "owner"}
         onAdmin={() => setScreen("admin")}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
