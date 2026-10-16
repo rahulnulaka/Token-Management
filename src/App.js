@@ -3485,7 +3485,6 @@ export default function App() {
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => {
           setAdminReturnScreen("dashboards");
-          setShowAdminSetup(false);
           setShowAdminLogin(false);
           if (!auth.adminUsername) setScreen("admin-setup");
           else if (getAdminToken()) setScreen("admin");
