@@ -172,6 +172,32 @@ async function getRegistrations(dashboardId) {
   );
 }
 
+async function getDashboardMembers(dashboardId) {
+  return api(`/api/v5/dashboards/${dashboardId}/members`, {}, getUserToken());
+}
+
+async function createDashboardMember(dashboardId, username, password) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/members`,
+    {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    },
+    getUserToken(),
+  );
+}
+
+async function resetDashboardMemberPassword(dashboardId, userId, password) {
+  return api(
+    `/api/v5/dashboards/${dashboardId}/members/${userId}/reset-password`,
+    {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    },
+    getUserToken(),
+  );
+}
+
 async function createRegistration(dashboardId, payload) {
   return api(
     `/api/v5/dashboards/${dashboardId}/registrations`,
@@ -1140,7 +1166,6 @@ function DashboardHome({
   selected,
   onSelect,
   onCreate,
-  onAdmin,
   onLogout,
   user,
   hasAdmin,
@@ -1270,34 +1295,6 @@ function DashboardHome({
               </div>
             </button>
           )}
-        </div>
-
-        <div
-          style={{
-            ...styles.card,
-            marginTop: 18,
-            padding: 20,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 15,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 800 }}>Administration</div>
-            <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-              {hasAdmin
-                ? "Admin credentials are configured."
-                : "Create one admin account for all your dashboards."}
-            </div>
-          </div>
-          <button
-            onClick={onAdmin}
-            style={{ ...styles.button, background: "#111827", color: "#fff" }}
-          >
-            🔐 Admin Received
-          </button>
         </div>
       </div>
     </div>
@@ -1822,6 +1819,229 @@ function SuccessModal({ entry, associationName, onClose }) {
   );
 }
 
+function DashboardUsersPanel({ dashboardId }) {
+  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [resetPasswords, setResetPasswords] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadMembers() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await getDashboardMembers(dashboardId);
+      setMembers(result.members || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addUser(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      setLoading(true);
+      await createDashboardMember(
+        dashboardId,
+        username.trim().toLowerCase(),
+        password,
+      );
+      setUsername("");
+      setPassword("");
+      setMessage(
+        "Dashboard user created. Share the User ID and password securely.",
+      );
+      await loadMembers();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(member) {
+    const next = String(resetPasswords[member.id] || "");
+    if (next.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    setError("");
+    setMessage("");
+    try {
+      setLoading(true);
+      await resetDashboardMemberPassword(dashboardId, member.id, next);
+      setResetPasswords((old) => ({ ...old, [member.id]: "" }));
+      setMessage(`Password reset for ${member.username}.`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ ...styles.card, marginBottom: 18, overflow: "hidden" }}>
+      <div
+        style={{
+          padding: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 900 }}>Dashboard Users</div>
+          <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+            Create up to 2 individual logins for this dashboard and reset their
+            passwords.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            const next = !open;
+            setOpen(next);
+            if (next) await loadMembers();
+          }}
+          style={{ ...styles.button, background: "#111827", color: "#fff" }}
+        >
+          {open ? "Hide User Management" : "＋ Manage Dashboard Users"}
+        </button>
+      </div>
+      {open && (
+        <div style={{ borderTop: "1px solid #eef2f7", padding: 16 }}>
+          <form
+            onSubmit={addUser}
+            className="spya-grid-2"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+              gap: 12,
+              alignItems: "end",
+            }}
+          >
+            <Field label="New User ID">
+              <input
+                required
+                minLength={4}
+                maxLength={40}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. tokenuser01"
+                style={styles.input}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Temporary Password (min. 8 characters)">
+              <input
+                required
+                minLength={8}
+                maxLength={128}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Create a strong password"
+                style={styles.input}
+                autoComplete="new-password"
+              />
+            </Field>
+            <button
+              disabled={loading || members.length >= 2}
+              type="submit"
+              style={{
+                ...styles.button,
+                background: members.length >= 2 ? "#cbd5e1" : "#7c3aed",
+                color: "#fff",
+                gridColumn: "1 / -1",
+              }}
+            >
+              {members.length >= 2
+                ? "Maximum 2 users reached"
+                : loading
+                  ? "Please wait..."
+                  : "Create Dashboard User"}
+            </button>
+          </form>
+          <div style={{ marginTop: 18, fontWeight: 800 }}>
+            Assigned users ({members.length}/2)
+          </div>
+          {members.length === 0 && (
+            <div style={{ color: "#64748b", fontSize: 13, marginTop: 8 }}>
+              {loading ? "Loading users..." : "No dashboard users created yet."}
+            </div>
+          )}
+          {members.map((member) => (
+            <div
+              key={member.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "minmax(120px,1fr) minmax(180px,1.5fr) auto",
+                gap: 10,
+                alignItems: "end",
+                padding: "12px 0",
+                borderBottom: "1px solid #f1f5f9",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800 }}>{member.username}</div>
+                <div style={{ color: "#64748b", fontSize: 11 }}>
+                  {member.is_active ? "Active" : "Inactive"}
+                </div>
+              </div>
+              <input
+                type="password"
+                minLength={8}
+                value={resetPasswords[member.id] || ""}
+                onChange={(e) =>
+                  setResetPasswords((old) => ({
+                    ...old,
+                    [member.id]: e.target.value,
+                  }))
+                }
+                placeholder="New password"
+                style={styles.input}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => resetPassword(member)}
+                style={{
+                  ...styles.button,
+                  background: "#f1f5f9",
+                  color: "#334155",
+                }}
+              >
+                Reset Password
+              </button>
+            </div>
+          ))}
+          {error && <ErrorText>{error}</ErrorText>}
+          {message && (
+            <div style={{ color: "#15803d", fontSize: 13, marginTop: 10 }}>
+              {message}
+            </div>
+          )}
+          <div style={{ color: "#64748b", fontSize: 11, marginTop: 12 }}>
+            Users sign in with their User ID and password and can access only
+            this assigned dashboard.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserDashboard({
   dashboard,
   categories,
@@ -1832,7 +2052,7 @@ function UserDashboard({
   onStatusChange,
   onCancel,
   onReprint,
-  onAdmin,
+  isOwner,
 }) {
   const [filter, setFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -1900,19 +2120,6 @@ function UserDashboard({
             <div style={{ fontWeight: 900, letterSpacing: 1.2 }}>
               {dashboard.association_name}
             </div>
-            <button
-              type="button"
-              onClick={onAdmin}
-              style={{
-                ...styles.button,
-                background: "#111827",
-                color: "#fff",
-                padding: "8px 11px",
-                fontSize: 12,
-              }}
-            >
-              🔐 Admin Received
-            </button>
           </div>
         </div>
 
@@ -1934,6 +2141,8 @@ function UserDashboard({
             Manage registrations for this dashboard.
           </p>
         </div>
+
+        {isOwner && <DashboardUsersPanel dashboardId={dashboard.id} />}
 
         <div
           className="spya-grid-4"
@@ -3481,7 +3690,7 @@ export default function App() {
               );
             }
           }}
-          onAdmin={() => openAdminReceived("dashboard")}
+          isOwner={auth.user?.role !== "user"}
         />
         {successEntry && (
           <SuccessModal
@@ -3490,41 +3699,6 @@ export default function App() {
             onClose={() => setSuccessEntry(null)}
           />
         )}
-      </>
-    );
-  }
-
-  if (screen === "admin") {
-    return (
-      <>
-        <style>{css}</style>
-        <AdminReceived
-          dashboard={selectedDashboard || dashboards[0]}
-          dashboards={dashboards}
-          onBack={() => setScreen(adminReturnScreen)}
-          onRefresh={() => {}}
-          onDownload={downloadAdminExcel}
-          onCreate={() => {
-            const first = dashboards[0];
-            if (first) {
-              openDashboard(first).then(() => setScreen("register"));
-            }
-          }}
-          onLogout={() => {
-            sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-            setScreen(adminReturnScreen);
-          }}
-          onStatusChange={async (dashboardId, entry, status) => {
-            await updateAdminStatus(dashboardId, entry.id, status);
-          }}
-          onCancel={async (dashboardId, entry, categoryEntry) => {
-            await cancelAdminRegistration(
-              dashboardId,
-              categoryEntry?.id || entry.id,
-            );
-          }}
-          onReprint={printLabels}
-        />
       </>
     );
   }
@@ -3540,7 +3714,6 @@ export default function App() {
         hasAdmin={auth.user?.role !== "user"}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
-        onAdmin={() => openAdminReceived("dashboards")}
         onLogout={logout}
       />
     </>
