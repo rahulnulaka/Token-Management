@@ -2006,6 +2006,14 @@ function UserDashboard({
   const [filter, setFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
 
+  // Shared table-cell styling used throughout the registrations table.
+  const cell = {
+    padding: "12px 10px",
+    verticalAlign: "top",
+    borderBottom: "1px solid #f1f5f9",
+    overflowWrap: "break-word",
+  };
+
   const filtered = useMemo(
     () =>
       entries.filter((entry) => {
