@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
@@ -236,13 +236,6 @@ async function markRegistrationPrinted(dashboardId, registrationId) {
   );
 }
 
-async function getAdminRegistrations(dashboardId) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations`,
-    {},
-    getAdminToken(),
-  );
-}
 async function getAdminInventory(dashboardId) {
   return api(
     `/api/v5/admin/dashboards/${dashboardId}/inventory`,
@@ -256,16 +249,6 @@ async function changeAdminPassword(currentPassword, newPassword) {
     {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
-    },
-    getAdminToken(),
-  );
-}
-async function saveAdminNotes(dashboardId, registrationId, notes) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/notes`,
-    {
-      method: "POST",
-      body: JSON.stringify({ notes }),
     },
     getAdminToken(),
   );
