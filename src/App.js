@@ -243,26 +243,6 @@ async function getAdminRegistrations(dashboardId) {
     getAdminToken(),
   );
 }
-
-async function updateAdminStatus(dashboardId, registrationId, status) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/status`,
-    {
-      method: "POST",
-      body: JSON.stringify({ status }),
-    },
-    getAdminToken(),
-  );
-}
-
-async function cancelAdminRegistration(dashboardId, registrationId) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/cancel`,
-    { method: "POST", body: JSON.stringify({}) },
-    getAdminToken(),
-  );
-}
-
 async function saveAdminNotes(dashboardId, registrationId, notes) {
   return api(
     `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/notes`,
@@ -273,37 +253,6 @@ async function saveAdminNotes(dashboardId, registrationId, notes) {
     getAdminToken(),
   );
 }
-
-function downloadAdminExcel(dashboardId) {
-  const token = getAdminToken();
-  if (!token) {
-    alert("Admin login required.");
-    return;
-  }
-
-  fetch(`${API}/api/v5/admin/dashboards/${dashboardId}/export-excel`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Unable to download Excel.");
-      }
-      return res.blob();
-    })
-    .then((blob) => {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "spya-token-registrations.xlsx";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    })
-    .catch((error) => alert(error.message));
-}
-
 function tokenRange(entry) {
   if (!entry) return "";
   if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {
@@ -2651,19 +2600,7 @@ function AdminLoginModal({ onClose, onSuccess }) {
     </Modal>
   );
 }
-
-function AdminReceived({
-  dashboard,
-  dashboards,
-  onBack,
-  onRefresh,
-  onDownload,
-  onCreate,
-  onLogout,
-  onStatusChange,
-  onCancel,
-  onReprint,
-}) {
+{
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState(null);
   const [selectedDashboardId, setSelectedDashboardId] = useState(
@@ -3432,16 +3369,6 @@ export default function App() {
     setEntries([]);
     setScreen("dashboards");
   }
-
-  function openAdminReceived(returnTo) {
-    setAdminReturnScreen(returnTo);
-    if (getAdminToken()) {
-      setScreen("admin");
-      return;
-    }
-    setScreen("admin-login");
-  }
-
   if (loading) {
     return (
       <>
