@@ -2445,6 +2445,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
   const [inventory, setInventory] = useState(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [inventoryError, setInventoryError] = useState("");
+  const [selectedActionStatus, setSelectedActionStatus] = useState("");
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -2462,6 +2463,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
       }
       setLoadingInventory(true);
       setInventoryError("");
+      setSelectedActionStatus("");
       try {
         const result = await getAdminInventory(selectedId);
         if (!cancelled) setInventory(result);
@@ -2513,6 +2515,11 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
   }
 
   const summary = inventory?.summary || {};
+  const actionStatuses = inventory?.actionStatuses || [];
+  const statusDetails = inventory?.statusDetails || [];
+  const selectedStatusRows = selectedActionStatus
+    ? statusDetails.filter((row) => row.status === selectedActionStatus)
+    : [];
   const number = (value) => Number(value || 0).toLocaleString("en-IN");
   const th = {
     textAlign: "left",
@@ -2706,6 +2713,211 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                   value={number(summary.registrations)}
                 />
               </div>
+
+              <div style={{ ...styles.card, padding: 18, marginBottom: 18 }}>
+                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 19 }}>
+                  Action Status Breakdown
+                </h2>
+                <p
+                  style={{ margin: "0 0 14px", color: "#64748b", fontSize: 12 }}
+                >
+                  Select any count to view the matching token records below.
+                  Counts represent tokens; registrations show grouped orders.
+                </p>
+                <div
+                  className="spya-grid-4"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {actionStatuses.map((item) => {
+                    const active = selectedActionStatus === item.status;
+                    const tone =
+                      item.status === "Complete"
+                        ? { bg: "#ecfdf5", fg: "#047857", border: "#10b981" }
+                        : item.status === "Payment Not Received"
+                          ? { bg: "#fff7ed", fg: "#c2410c", border: "#fb923c" }
+                          : item.status === "Cancelled"
+                            ? {
+                                bg: "#fef2f2",
+                                fg: "#b91c1c",
+                                border: "#f87171",
+                              }
+                            : {
+                                bg: "#f1f5f9",
+                                fg: "#334155",
+                                border: "#94a3b8",
+                              };
+                    return (
+                      <button
+                        key={item.status}
+                        type="button"
+                        onClick={() =>
+                          setSelectedActionStatus(active ? "" : item.status)
+                        }
+                        aria-pressed={active}
+                        style={{
+                          textAlign: "left",
+                          cursor: "pointer",
+                          border: `2px solid ${active ? tone.border : "#e2e8f0"}`,
+                          background: tone.bg,
+                          color: tone.fg,
+                          borderRadius: 12,
+                          padding: 14,
+                          minWidth: 0,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {item.status}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 25,
+                            fontWeight: 900,
+                            marginTop: 6,
+                          }}
+                        >
+                          {number(item.token_count)}
+                        </div>
+                        <div style={{ fontSize: 11, marginTop: 4 }}>
+                          {number(item.registrations)} registration(s)
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            marginTop: 8,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {active ? "Hide details ↑" : "View details ↓"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {!actionStatuses.length && (
+                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                      No action-status data available yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedActionStatus && (
+                <div
+                  style={{
+                    ...styles.card,
+                    padding: 18,
+                    marginBottom: 18,
+                    overflowX: "auto",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: 19 }}>
+                        {selectedActionStatus} — Details
+                      </h2>
+                      <p
+                        style={{
+                          margin: "5px 0 0",
+                          color: "#64748b",
+                          fontSize: 12,
+                        }}
+                      >
+                        {number(selectedStatusRows.length)} matching record(s)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedActionStatus("")}
+                      style={{
+                        ...styles.button,
+                        background: "#f1f5f9",
+                        color: "#334155",
+                      }}
+                    >
+                      Close Details
+                    </button>
+                  </div>
+                  <table
+                    style={{
+                      width: "100%",
+                      minWidth: 900,
+                      borderCollapse: "collapse",
+                      fontSize: 12,
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={th}>Order / Token Range</th>
+                        <th style={th}>Customer</th>
+                        <th style={th}>Phone</th>
+                        <th style={th}>Category</th>
+                        <th style={th}>Quantity</th>
+                        <th style={th}>Amount</th>
+                        <th style={th}>Payment Mode</th>
+                        <th style={th}>Created By</th>
+                        <th style={th}>Created At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedStatusRows.map((row) => (
+                        <tr key={row.id}>
+                          <td style={td}>
+                            <div style={{ fontWeight: 800 }}>
+                              ORD
+                              {String(row.order_number || "").padStart(4, "0")}
+                            </div>
+                            <div style={{ color: "#64748b", marginTop: 3 }}>
+                              {row.prefix || ""}
+                              {row.token_start || ""}
+                              {row.token_end &&
+                              row.token_end !== row.token_start
+                                ? `–${row.prefix || ""}${row.token_end}`
+                                : ""}
+                            </div>
+                          </td>
+                          <td style={td}>{row.customer_name || "—"}</td>
+                          <td style={td}>{row.customer_phone || "—"}</td>
+                          <td style={td}>{row.category_name || "—"}</td>
+                          <td style={td}>{number(row.quantity)}</td>
+                          <td style={td}>₹{number(row.amount)}</td>
+                          <td style={td}>{row.payment_mode || "—"}</td>
+                          <td style={td}>{row.created_by || "—"}</td>
+                          <td style={td}>
+                            {row.created_at
+                              ? new Date(row.created_at).toLocaleString("en-IN")
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                      {!selectedStatusRows.length && (
+                        <tr>
+                          <td style={td} colSpan={9}>
+                            No records found for this action status.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div
                 style={{

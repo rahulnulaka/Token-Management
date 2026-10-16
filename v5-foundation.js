@@ -856,6 +856,49 @@ ORDER BY d.created_at`,
         [dashboardId, req.v5AdminUserId],
       );
 
+      const actionStatusResult = await db.query(
+        `SELECT
+           COALESCE(NULLIF(TRIM(r.status),''),'Unknown') AS status,
+           COUNT(DISTINCT COALESCE(r.registration_group_id::text,r.id::text))::int AS registrations,
+           COALESCE(SUM(r.quantity),0)::int AS token_count,
+           COALESCE(SUM(r.amount),0)::numeric AS total_amount
+         FROM registrations r
+         WHERE r.dashboard_id=$1
+         GROUP BY COALESCE(NULLIF(TRIM(r.status),''),'Unknown')
+         ORDER BY CASE COALESCE(NULLIF(TRIM(r.status),''),'Unknown')
+           WHEN 'Complete' THEN 1
+           WHEN 'Payment Not Received' THEN 2
+           WHEN 'Cancelled' THEN 3
+           ELSE 4 END, status`,
+        [dashboardId],
+      );
+
+      const statusDetailsResult = await db.query(
+        `SELECT
+           r.id,
+           r.order_number,
+           r.registration_group_id,
+           c.name AS category_name,
+           c.prefix,
+           r.quantity,
+           r.token_start,
+           r.token_end,
+           r.customer_name,
+           r.customer_phone,
+           r.customer_email,
+           r.payment_mode,
+           r.amount,
+           COALESCE(NULLIF(TRIM(r.status),''),'Unknown') AS status,
+           r.created_at,
+           u.username AS created_by
+         FROM registrations r
+         LEFT JOIN token_categories c ON c.id=r.category_id
+         LEFT JOIN users u ON u.id=r.created_by_user_id
+         WHERE r.dashboard_id=$1
+         ORDER BY r.created_at DESC, r.order_number DESC`,
+        [dashboardId],
+      );
+
       const categoryResult = await db.query(
         `SELECT
            c.id AS category_id,
@@ -880,6 +923,8 @@ ORDER BY d.created_at`,
           association_name: dashboard.association_name,
         },
         summary: summaryResult.rows[0] || {},
+        actionStatuses: actionStatusResult.rows,
+        statusDetails: statusDetailsResult.rows,
         byUser: byUserResult.rows.map((row) => ({
           ...row,
           isAdmin: String(row.user_id) === String(req.v5AdminUserId),
