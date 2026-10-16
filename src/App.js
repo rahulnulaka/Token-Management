@@ -106,7 +106,7 @@ function getUserToken() {
 }
 
 function getAdminToken() {
-  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || "";
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || getUserToken() || "";
 }
 
 async function registerUser(username, password) {
@@ -3226,10 +3226,6 @@ export default function App() {
 
   function openAdminReceived(returnTo) {
     setAdminReturnScreen(returnTo);
-    if (!auth?.adminUsername) {
-      setScreen("admin-setup");
-      return;
-    }
     if (getAdminToken()) {
       setScreen("admin");
       return;
@@ -3266,8 +3262,12 @@ export default function App() {
         <LoginScreen
           onLogin={(result) => {
             setAuth({
-              user: result.user,
-              adminUsername: result.adminUsername,
+              user: {
+                ...result.user,
+                role: result.user?.role || (result.hasAdmin ? "owner" : "user"),
+                dashboardId: result.user?.dashboardId,
+              },
+              adminUsername: result.user?.username || result.adminUsername,
             });
             setDashboards(result.dashboards || []);
             setLoading(false);
@@ -3537,7 +3537,7 @@ export default function App() {
         dashboards={dashboards}
         selected={selectedDashboard}
         user={auth.user}
-        hasAdmin={!!auth.adminUsername}
+        hasAdmin={auth.user?.role !== "user"}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => openAdminReceived("dashboards")}

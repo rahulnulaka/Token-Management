@@ -91,6 +91,8 @@ function requireUser(req, res, next) {
     return res.status(401).json({ error: "V5 authentication required." });
 
   req.v5UserId = p.sub;
+  req.v5Role = p.role || "owner";
+  req.v5DashboardId = p.dashboardId || null;
 
   next();
 }
@@ -270,36 +272,40 @@ module.exports = function registerV5(app) {
         return res.status(401).json({ error: "Invalid User ID or password." });
       }
 
-      const dashboards = (
+      const ownedDashboards = (
         await db.query(
-          `SELECT id,association_name
-
-           FROM dashboards
-
-          WHERE user_id=$1 AND archived_at IS NULL
-
- ORDER BY created_at`,
-
+          `SELECT id,association_name FROM dashboards
+            WHERE user_id=$1 AND archived_at IS NULL ORDER BY created_at`,
           [user.id],
         )
       ).rows;
-
-      const admin = (
-        await db.query(
-          "SELECT username FROM admin_accounts WHERE user_id=$1 LIMIT 1",
-
-          [user.id],
-        )
-      ).rows[0];
+      const memberDashboards = ownedDashboards.length
+        ? []
+        : (
+            await db.query(
+              `SELECT d.id,d.association_name FROM dashboard_members dm
+             JOIN dashboards d ON d.id=dm.dashboard_id
+            WHERE dm.user_id=$1 AND dm.is_active=TRUE AND d.archived_at IS NULL
+            ORDER BY d.created_at`,
+              [user.id],
+            )
+          ).rows;
+      const dashboards = ownedDashboards.length
+        ? ownedDashboards
+        : memberDashboards;
+      const isDashboardUser =
+        !ownedDashboards.length && memberDashboards.length > 0;
 
       return res.json({
         success: true,
 
         token: token({
           type: "user",
-
+          role: isDashboardUser ? "user" : "owner",
+          ...(isDashboardUser && memberDashboards.length === 1
+            ? { dashboardId: memberDashboards[0].id }
+            : {}),
           sub: user.id,
-
           exp: Date.now() + USER_TOKEN_TTL_MS,
         }),
 
@@ -311,13 +317,13 @@ module.exports = function registerV5(app) {
           created_at: user.created_at,
         },
 
-        hasAdmin: !!admin,
+        hasAdmin: !isDashboardUser,
 
-        adminUsername: admin?.username || null,
+        adminUsername: isDashboardUser ? null : user.username,
 
         dashboards,
 
-        dashboardLimit: MAX_DASHBOARDS_PER_USER,
+        dashboardLimit: isDashboardUser ? 0 : MAX_DASHBOARDS_PER_USER,
       });
     }),
   ); // ------------------------------------------------------------
@@ -350,32 +356,33 @@ WHERE id=$1`,
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
 
-FROM dashboards
+FROM dashboards d
 
-WHERE user_id=$1 AND archived_at IS NULL
+WHERE (d.user_id=$1 OR EXISTS (
+  SELECT 1 FROM dashboard_members dm
+   WHERE dm.dashboard_id=d.id AND dm.user_id=$1 AND dm.is_active=TRUE
+)) AND d.archived_at IS NULL
 
-ORDER BY created_at`,
+ORDER BY d.created_at`,
 
           [req.v5UserId],
         )
       ).rows;
 
-      const admin = (
-        await db.query(
-          "SELECT username FROM admin_accounts WHERE user_id=$1 LIMIT 1",
-
-          [req.v5UserId],
-        )
-      ).rows[0];
+      const owner = true;
 
       res.json({
-        user,
+        user: {
+          ...user,
+          role: req.v5Role || "owner",
+          dashboardId: req.v5DashboardId || null,
+        },
 
         dashboards,
 
-        adminUsername: admin?.username || null,
+        adminUsername: req.v5Role === "user" ? null : user.username,
 
-        dashboardLimit: MAX_DASHBOARDS_PER_USER,
+        dashboardLimit: req.v5Role === "user" ? 0 : MAX_DASHBOARDS_PER_USER,
       });
     }),
   ); // ------------------------------------------------------------
@@ -522,11 +529,14 @@ ORDER BY created_at`,
         await db.query(
           `SELECT id,association_name,contact_phone,contact_email,address,description,created_at
 
-FROM dashboards
+FROM dashboards d
 
-WHERE user_id=$1 AND archived_at IS NULL
+WHERE (d.user_id=$1 OR EXISTS (
+  SELECT 1 FROM dashboard_members dm
+   WHERE dm.dashboard_id=d.id AND dm.user_id=$1 AND dm.is_active=TRUE
+)) AND d.archived_at IS NULL
 
-ORDER BY created_at`,
+ORDER BY d.created_at`,
 
           [req.v5UserId],
         )
@@ -548,6 +558,10 @@ ORDER BY created_at`,
     requireUser,
 
     asyncRoute(async (req, res) => {
+      if (req.v5Role === "user")
+        return res
+          .status(403)
+          .json({ error: "Dashboard users cannot create dashboards." });
       const db = requireDb();
 
       const client = await db.connect();
@@ -707,7 +721,11 @@ ORDER BY created_at`,
 
  FROM dashboards
 
- WHERE id=$1 AND user_id=$2 AND archived_at IS NULL`,
+ WHERE id=$1 AND archived_at IS NULL
+ AND (user_id=$2 OR EXISTS (
+   SELECT 1 FROM dashboard_members dm
+    WHERE dm.dashboard_id=dashboards.id AND dm.user_id=$2 AND dm.is_active=TRUE
+ ))`,
 
           [req.params.dashboardId, req.v5UserId],
         )
@@ -732,6 +750,229 @@ ORDER BY created_at`,
       ).rows;
 
       res.json({ dashboard, categories });
+    }),
+  );
+
+  // V6: change the current user's password. Passwords are always stored as scrypt hashes.
+  app.post(
+    "/api/v5/account/change-password",
+    requireUser,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const current = String(req.body?.currentPassword || "");
+      const next = validatePassword(req.body?.newPassword);
+      const row = (
+        await db.query("SELECT password_hash FROM users WHERE id=$1", [
+          req.v5UserId,
+        ])
+      ).rows[0];
+      if (!row || !checkPassword(current, row.password_hash)) {
+        return res
+          .status(400)
+          .json({ error: "Current password is incorrect." });
+      }
+      await db.query("UPDATE users SET password_hash=$1 WHERE id=$2", [
+        hashPassword(next),
+        req.v5UserId,
+      ]);
+      res.json({
+        success: true,
+        message: "Password changed. Please log in again.",
+      });
+    }),
+  );
+
+  // V6: owner can create up to two regular users per dashboard.
+  app.get(
+    "/api/v5/dashboards/:dashboardId/members",
+    requireUser,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const dashboard = (
+        await db.query(
+          "SELECT id FROM dashboards WHERE id=$1 AND user_id=$2 AND archived_at IS NULL",
+          [req.params.dashboardId, req.v5UserId],
+        )
+      ).rows[0];
+      if (!dashboard)
+        return res
+          .status(403)
+          .json({ error: "Only the owner can manage dashboard users." });
+      const members = (
+        await db.query(
+          `SELECT u.id,u.username,dm.is_active,dm.created_at
+         FROM dashboard_members dm JOIN users u ON u.id=dm.user_id
+        WHERE dm.dashboard_id=$1 ORDER BY dm.created_at`,
+          [dashboard.id],
+        )
+      ).rows;
+      res.json({
+        members,
+        limit: 2,
+        remaining: Math.max(0, 2 - members.length),
+      });
+    }),
+  );
+
+  app.post(
+    "/api/v5/dashboards/:dashboardId/members",
+    requireUser,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const dashboardId = req.params.dashboardId;
+      const username = normalizeUsername(req.body?.username);
+      const password = validatePassword(req.body?.password);
+      const owner = (
+        await db.query(
+          "SELECT id FROM dashboards WHERE id=$1 AND user_id=$2 AND archived_at IS NULL",
+          [dashboardId, req.v5UserId],
+        )
+      ).rows[0];
+      if (!owner)
+        return res
+          .status(403)
+          .json({ error: "Only the owner can add dashboard users." });
+      const client = await db.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          `SPYA-V6-MEMBERS:${dashboardId}`,
+        ]);
+        const count = Number(
+          (
+            await client.query(
+              "SELECT COUNT(*)::int AS count FROM dashboard_members WHERE dashboard_id=$1 AND is_active=TRUE",
+              [dashboardId],
+            )
+          ).rows[0].count,
+        );
+        if (count >= 2) {
+          await client.query("ROLLBACK");
+          return res
+            .status(409)
+            .json({
+              error: "A dashboard can have a maximum of two regular users.",
+            });
+        }
+        let user = (
+          await client.query(
+            "SELECT id,username FROM users WHERE LOWER(username)=LOWER($1)",
+            [username],
+          )
+        ).rows[0];
+        if (user) {
+          await client.query("ROLLBACK");
+          return res
+            .status(409)
+            .json({
+              error: "That User ID already exists. Choose a unique User ID.",
+            });
+        }
+        user = (
+          await client.query(
+            "INSERT INTO users(username,password_hash) VALUES($1,$2) RETURNING id,username",
+            [username, hashPassword(password)],
+          )
+        ).rows[0];
+        await client.query(
+          "INSERT INTO dashboard_members(dashboard_id,user_id,role,is_active) VALUES($1,$2,'user',TRUE)",
+          [dashboardId, user.id],
+        );
+        await client.query("COMMIT");
+        res.status(201).json({ success: true, member: user });
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw e;
+      } finally {
+        client.release();
+      }
+    }),
+  );
+
+  app.post(
+    "/api/v5/dashboards/:dashboardId/members/:userId/reset-password",
+    requireUser,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const owner = (
+        await db.query(
+          "SELECT id FROM dashboards WHERE id=$1 AND user_id=$2 AND archived_at IS NULL",
+          [req.params.dashboardId, req.v5UserId],
+        )
+      ).rows[0];
+      if (!owner)
+        return res
+          .status(403)
+          .json({
+            error: "Only the owner can reset dashboard-user passwords.",
+          });
+      const password = validatePassword(req.body?.password);
+      const member = (
+        await db.query(
+          "SELECT user_id FROM dashboard_members WHERE dashboard_id=$1 AND user_id=$2",
+          [req.params.dashboardId, req.params.userId],
+        )
+      ).rows[0];
+      if (!member)
+        return res.status(404).json({ error: "Dashboard user not found." });
+      await db.query("UPDATE users SET password_hash=$1 WHERE id=$2", [
+        hashPassword(password),
+        member.user_id,
+      ]);
+      res.json({ success: true, message: "Dashboard-user password reset." });
+    }),
+  );
+
+  // Dashboard users log in with their assigned dashboard's User ID and password.
+  app.post(
+    "/api/v5/auth/dashboard-login",
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const username = normalizeUsername(req.body?.username);
+      const password = String(req.body?.password || "");
+      const dashboardId = String(req.body?.dashboardId || "");
+      const user = (
+        await db.query(
+          "SELECT id,username,password_hash,created_at FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1",
+          [username],
+        )
+      ).rows[0];
+      if (!user || !checkPassword(password, user.password_hash)) {
+        return res.status(401).json({ error: "Invalid User ID or password." });
+      }
+      const membership = (
+        await db.query(
+          `SELECT d.id,d.association_name FROM dashboard_members dm
+         JOIN dashboards d ON d.id=dm.dashboard_id
+        WHERE dm.user_id=$1 AND dm.dashboard_id=$2 AND dm.is_active=TRUE AND d.archived_at IS NULL`,
+          [user.id, dashboardId],
+        )
+      ).rows[0];
+      if (!membership)
+        return res
+          .status(403)
+          .json({ error: "This user is not assigned to that dashboard." });
+      res.json({
+        success: true,
+        token: token({
+          type: "user",
+          role: "user",
+          sub: user.id,
+          dashboardId,
+          exp: Date.now() + USER_TOKEN_TTL_MS,
+        }),
+        user: {
+          id: user.id,
+          username: user.username,
+          created_at: user.created_at,
+          role: "user",
+          dashboardId,
+        },
+        dashboards: [membership],
+        hasAdmin: false,
+        adminUsername: null,
+        dashboardLimit: 0,
+      });
     }),
   );
 };

@@ -1461,10 +1461,12 @@ function requireV5UserRoute(req, res, next) {
   const payload = verifyV5Token(getV5Bearer(req));
 
   if (!payload || payload.type !== "user" || !payload.sub) {
-    return res.status(401).json({ error: "V5 user authentication required." });
+    return res.status(401).json({ error: "V6 user authentication required." });
   }
 
   req.v5UserId = payload.sub;
+  req.v5Role = payload.role || "owner";
+  req.v5DashboardId = payload.dashboardId || null;
 
   next();
 }
@@ -1472,20 +1474,35 @@ function requireV5UserRoute(req, res, next) {
 function requireV5AdminRoute(req, res, next) {
   const payload = verifyV5Token(getV5Bearer(req));
 
-  if (
-    !payload ||
-    payload.type !== "admin" ||
-    !payload.sub ||
-    !payload.adminId
-  ) {
-    return res.status(401).json({ error: "V5 admin authentication required." });
+  // V6: the dashboard owner is the admin. No separate admin account/token is needed.
+  if (!payload || payload.type !== "user" || !payload.sub) {
+    return res
+      .status(401)
+      .json({ error: "Owner/admin authentication required." });
   }
-
-  req.v5AdminUserId = payload.sub;
-
-  req.v5AdminId = payload.adminId;
-
-  next();
+  const dashboardId = req.params.dashboardId;
+  if (!dashboardId) {
+    return res.status(400).json({ error: "Dashboard ID is required." });
+  }
+  requirePg()
+    .query(
+      "SELECT id FROM dashboards WHERE id=$1 AND user_id=$2 AND archived_at IS NULL LIMIT 1",
+      [dashboardId, payload.sub],
+    )
+    .then((result) => {
+      if (!result.rows[0]) {
+        return res
+          .status(403)
+          .json({ error: "Only the dashboard owner can perform this action." });
+      }
+      req.v5AdminUserId = payload.sub;
+      req.v5AdminId = null;
+      next();
+    })
+    .catch((error) => {
+      console.error("V6 owner authorization error:", error);
+      res.status(500).json({ error: "Unable to verify dashboard owner." });
+    });
 }
 
 function positiveInteger(value, fieldName, max = 9999) {
@@ -1590,12 +1607,19 @@ function normalizeV5RegistrationInput(body = {}) {
 async function getOwnedDashboard(db, dashboardId, userId) {
   return (
     await db.query(
-      `SELECT *
-FROM dashboards
-    WHERE id=$1
- AND user_id=$2
- AND archived_at IS NULL
-    LIMIT 1`,
+      `SELECT d.*,
+              CASE WHEN d.user_id=$2 THEN 'owner' ELSE 'user' END AS access_role
+         FROM dashboards d
+        WHERE d.id=$1
+          AND d.archived_at IS NULL
+          AND (
+            d.user_id=$2
+            OR EXISTS (
+              SELECT 1 FROM dashboard_members dm
+               WHERE dm.dashboard_id=d.id AND dm.user_id=$2 AND dm.is_active=TRUE
+            )
+          )
+        LIMIT 1`,
       [dashboardId, userId],
     )
   ).rows[0];
@@ -1764,11 +1788,13 @@ async function createV5Registration({ dashboardId, userId, input }) {
             amount,
             payment_mode,
             status,
-            registration_group_id
+            registration_group_id,
+            created_by_user_id,
+            print_status
           )
          VALUES (
             $1, $2, $3, $4, $5, $6, $7,
-            $8, $9, $10, $11, 'Complete', $12
+            $8, $9, $10, $11, 'Complete', $12, $13, 'Not Yet Printed'
          )
          RETURNING *`,
         [
@@ -1784,6 +1810,7 @@ async function createV5Registration({ dashboardId, userId, input }) {
           amount,
           input.payment || null,
           groupId,
+          userId,
         ],
       );
 
@@ -2199,7 +2226,7 @@ app.post(
 --------------------------------------------------------- */
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/status",
-  requireV5UserRoute,
+  requireV5AdminRoute,
   async (req, res) => {
     try {
       const requested = String(req.body?.status || "").trim();
@@ -2256,7 +2283,7 @@ app.post(
 --------------------------------------------------------- */
 app.post(
   "/api/v5/dashboards/:dashboardId/registrations/:registrationId/cancel",
-  requireV5UserRoute,
+  requireV5AdminRoute,
   async (req, res) => {
     const db = requirePg();
     const client = await db.connect();
