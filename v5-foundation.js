@@ -821,6 +821,21 @@ ORDER BY d.created_at`,
         return res.status(404).json({ error: "Dashboard not found." });
       }
 
+      await db.query(
+        "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS print_status TEXT NOT NULL DEFAULT 'Not Yet Printed'",
+      );
+
+      const printSummaryResult = await db.query(
+        `SELECT
+           COUNT(DISTINCT COALESCE(r.registration_group_id::text,r.id::text))::int AS registrations,
+           COALESCE(SUM(r.quantity),0)::int AS token_count
+         FROM registrations r
+         WHERE r.dashboard_id=$1
+           AND COALESCE(NULLIF(TRIM(r.print_status),''),'Not Yet Printed')='Not Yet Printed'
+           AND COALESCE(NULLIF(TRIM(r.status),''),'Unknown') <> 'Cancelled'`,
+        [dashboardId],
+      );
+
       const summaryResult = await db.query(
         `SELECT
            COUNT(DISTINCT COALESCE(r.registration_group_id::text,r.id::text))::int AS registrations,
@@ -889,6 +904,7 @@ ORDER BY d.created_at`,
            r.payment_mode,
            r.amount,
            COALESCE(NULLIF(TRIM(r.status),''),'Unknown') AS status,
+           COALESCE(NULLIF(TRIM(r.print_status),''),'Not Yet Printed') AS print_status,
            r.created_at,
            u.username AS created_by
          FROM registrations r
@@ -923,6 +939,10 @@ ORDER BY d.created_at`,
           association_name: dashboard.association_name,
         },
         summary: summaryResult.rows[0] || {},
+        printSummary: printSummaryResult.rows[0] || {
+          registrations: 0,
+          token_count: 0,
+        },
         actionStatuses: actionStatusResult.rows,
         statusDetails: statusDetailsResult.rows,
         byUser: byUserResult.rows.map((row) => ({
