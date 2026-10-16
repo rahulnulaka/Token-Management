@@ -514,6 +514,44 @@ ORDER BY created_at`,
       });
     }),
   ); // ------------------------------------------------------------
+  // ADMIN PASSWORD CHANGE
+  // ------------------------------------------------------------
+  app.post(
+    "/api/v5/admin/change-password",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const currentPassword = String(req.body?.currentPassword || "");
+      const newPassword = validatePassword(req.body?.newPassword);
+      const admin = (
+        await db.query(
+          "SELECT id,user_id,password_hash FROM admin_accounts WHERE id=$1 AND user_id=$2 LIMIT 1",
+          [req.v5AdminId, req.v5AdminUserId],
+        )
+      ).rows[0];
+
+      if (!admin || !checkPassword(currentPassword, admin.password_hash)) {
+        return res
+          .status(400)
+          .json({ error: "Current password is incorrect." });
+      }
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          error: "New password must be different from the current password.",
+        });
+      }
+
+      await db.query(
+        "UPDATE admin_accounts SET password_hash=$1 WHERE id=$2 AND user_id=$3",
+        [hashPassword(newPassword), admin.id, admin.user_id],
+      );
+      res.json({
+        success: true,
+        message: "Admin password changed successfully. Please log in again.",
+      });
+    }),
+  );
+
   // DASHBOARDS
   // ------------------------------------------------------------
 
@@ -848,11 +886,9 @@ ORDER BY d.created_at`,
         );
         if (count >= 2) {
           await client.query("ROLLBACK");
-          return res
-            .status(409)
-            .json({
-              error: "A dashboard can have a maximum of two regular users.",
-            });
+          return res.status(409).json({
+            error: "A dashboard can have a maximum of two regular users.",
+          });
         }
         let user = (
           await client.query(
@@ -862,11 +898,9 @@ ORDER BY d.created_at`,
         ).rows[0];
         if (user) {
           await client.query("ROLLBACK");
-          return res
-            .status(409)
-            .json({
-              error: "That User ID already exists. Choose a unique User ID.",
-            });
+          return res.status(409).json({
+            error: "That User ID already exists. Choose a unique User ID.",
+          });
         }
         user = (
           await client.query(
@@ -901,11 +935,9 @@ ORDER BY d.created_at`,
         )
       ).rows[0];
       if (!owner)
-        return res
-          .status(403)
-          .json({
-            error: "Only the owner can reset dashboard-user passwords.",
-          });
+        return res.status(403).json({
+          error: "Only the owner can reset dashboard-user passwords.",
+        });
       const password = validatePassword(req.body?.password);
       const member = (
         await db.query(
@@ -920,6 +952,96 @@ ORDER BY d.created_at`,
         member.user_id,
       ]);
       res.json({ success: true, message: "Dashboard-user password reset." });
+    }),
+  );
+
+  // ADMIN INVENTORY / TOKEN GENERATION REPORT
+  // Only authenticated admins can access this endpoint.
+  app.get(
+    "/api/v5/admin/dashboards/:dashboardId/inventory",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const db = requireDb();
+      const dashboardId = req.params.dashboardId;
+      const dashboard = (
+        await db.query(
+          `SELECT id,association_name,user_id
+             FROM dashboards
+            WHERE id=$1 AND user_id=$2 AND archived_at IS NULL
+            LIMIT 1`,
+          [dashboardId, req.v5AdminUserId],
+        )
+      ).rows[0];
+
+      if (!dashboard) {
+        return res.status(404).json({ error: "Dashboard not found." });
+      }
+
+      const summaryResult = await db.query(
+        `SELECT
+           COUNT(DISTINCT COALESCE(r.registration_group_id::text,r.id::text))::int AS registrations,
+           COALESCE(SUM(CASE WHEN r.status <> 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS active_tokens,
+           COALESCE(SUM(r.quantity),0)::int AS tokens_ever_generated,
+           COALESCE(SUM(CASE WHEN r.status = 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS cancelled_tokens,
+           COUNT(*)::int AS registration_rows
+         FROM registrations r
+        WHERE r.dashboard_id=$1`,
+        [dashboardId],
+      );
+
+      const byUserResult = await db.query(
+        `SELECT
+           u.id AS user_id,
+           u.username,
+           COUNT(r.id)::int AS registration_rows,
+           COUNT(DISTINCT COALESCE(r.registration_group_id::text,r.id::text))::int AS registrations,
+           COALESCE(SUM(r.quantity),0)::int AS tokens_ever_generated,
+           COALESCE(SUM(CASE WHEN r.status <> 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS active_tokens,
+           COALESCE(SUM(CASE WHEN r.status = 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS cancelled_tokens,
+           COALESCE(SUM(CASE WHEN r.status = 'Complete' THEN r.amount ELSE 0 END),0)::numeric AS amount_received
+         FROM users u
+         LEFT JOIN registrations r
+           ON r.created_by_user_id=u.id AND r.dashboard_id=$1
+        WHERE u.id=$2
+           OR EXISTS (
+             SELECT 1 FROM dashboard_members dm
+              WHERE dm.dashboard_id=$1 AND dm.user_id=u.id AND dm.is_active=TRUE
+           )
+        GROUP BY u.id,u.username
+        ORDER BY CASE WHEN u.id=$2 THEN 0 ELSE 1 END,u.username`,
+        [dashboardId, req.v5AdminUserId],
+      );
+
+      const categoryResult = await db.query(
+        `SELECT
+           c.id AS category_id,
+           c.name AS category_name,
+           c.prefix,
+           c.price,
+           COALESCE(SUM(r.quantity),0)::int AS tokens_ever_generated,
+           COALESCE(SUM(CASE WHEN r.status <> 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS active_tokens,
+           COALESCE(SUM(CASE WHEN r.status = 'Cancelled' THEN r.quantity ELSE 0 END),0)::int AS cancelled_tokens
+         FROM token_categories c
+         LEFT JOIN registrations r ON r.category_id=c.id AND r.dashboard_id=c.dashboard_id
+        WHERE c.dashboard_id=$1
+        GROUP BY c.id,c.name,c.prefix,c.price,c.created_at
+        ORDER BY c.created_at`,
+        [dashboardId],
+      );
+
+      res.json({
+        success: true,
+        dashboard: {
+          id: dashboard.id,
+          association_name: dashboard.association_name,
+        },
+        summary: summaryResult.rows[0] || {},
+        byUser: byUserResult.rows.map((row) => ({
+          ...row,
+          isAdmin: String(row.user_id) === String(req.v5AdminUserId),
+        })),
+        byCategory: categoryResult.rows,
+      });
     }),
   );
 

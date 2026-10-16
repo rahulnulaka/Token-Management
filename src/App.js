@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
@@ -103,6 +103,10 @@ async function api(path, options = {}, token = null) {
 
 function getUserToken() {
   return sessionStorage.getItem(USER_TOKEN_KEY) || "";
+}
+
+function getAdminToken() {
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || getUserToken() || "";
 }
 
 async function registerUser(username, password) {
@@ -232,6 +236,40 @@ async function markRegistrationPrinted(dashboardId, registrationId) {
   );
 }
 
+async function getAdminRegistrations(dashboardId) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations`,
+    {},
+    getAdminToken(),
+  );
+}
+async function getAdminInventory(dashboardId) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/inventory`,
+    {},
+    getAdminToken(),
+  );
+}
+async function changeAdminPassword(currentPassword, newPassword) {
+  return api(
+    "/api/v5/admin/change-password",
+    {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    },
+    getAdminToken(),
+  );
+}
+async function saveAdminNotes(dashboardId, registrationId, notes) {
+  return api(
+    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/notes`,
+    {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+    },
+    getAdminToken(),
+  );
+}
 function tokenRange(entry) {
   if (!entry) return "";
   if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {
@@ -1097,6 +1135,8 @@ function DashboardHome({
   onLogout,
   user,
   hasAdmin,
+  onAdmin,
+  onAdminSetup,
 }) {
   return (
     <div style={styles.page}>
@@ -1119,9 +1159,42 @@ function DashboardHome({
               TOKEN MANAGEMENT V5
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {hasAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={onAdmin}
+                  style={{
+                    ...styles.button,
+                    background: "#111827",
+                    color: "#fff",
+                  }}
+                >
+                  Admin Portal
+                </button>
+                <button
+                  type="button"
+                  onClick={onAdminSetup}
+                  style={{
+                    ...styles.button,
+                    background: "#f3f4f6",
+                    color: "#374151",
+                  }}
+                >
+                  Set Admin Credentials
+                </button>
+              </>
+            )}
             <span style={{ color: "#64748b", fontSize: 12 }}>
-              {user?.email || "User"}
+              {user?.username || user?.email || "User"}
             </span>
             <button
               onClick={onLogout}
@@ -1984,7 +2057,8 @@ function UserDashboard({
 }) {
   const [filter, setFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
-  // Shared table-cell styling used by the registrations table.
+
+  // Shared table-cell styling used throughout the registrations table.
   const cell = {
     padding: "12px 10px",
     verticalAlign: "top",
@@ -2514,6 +2588,388 @@ function StatusBadge({ status }) {
   );
 }
 
+function AdminDashboard({ dashboards, onBack, onLogout }) {
+  const [selectedId, setSelectedId] = useState(dashboards[0]?.id || "");
+  const [inventory, setInventory] = useState(null);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [inventoryError, setInventoryError] = useState("");
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadInventory() {
+      if (!selectedId) {
+        setInventory(null);
+        return;
+      }
+      setLoadingInventory(true);
+      setInventoryError("");
+      try {
+        const result = await getAdminInventory(selectedId);
+        if (!cancelled) setInventory(result);
+      } catch (error) {
+        if (!cancelled) {
+          setInventory(null);
+          setInventoryError(error.message || "Unable to load inventory.");
+        }
+      } finally {
+        if (!cancelled) setLoadingInventory(false);
+      }
+    }
+    loadInventory();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  async function submitPasswordChange(e) {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordMessage("");
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation do not match.");
+      return;
+    }
+    try {
+      setSavingPassword(true);
+      const result = await changeAdminPassword(currentPassword, newPassword);
+      setPasswordMessage(result.message || "Password changed successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+      alert(
+        "Admin password changed. Please log in again using your new password.",
+      );
+      onLogout();
+    } catch (error) {
+      setPasswordError(error.message);
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  const summary = inventory?.summary || {};
+  const number = (value) => Number(value || 0).toLocaleString("en-IN");
+  const th = {
+    textAlign: "left",
+    padding: "11px 10px",
+    background: "#f8fafc",
+    borderBottom: "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
+  };
+  const td = {
+    padding: "11px 10px",
+    borderBottom: "1px solid #eef2f7",
+    verticalAlign: "top",
+  };
+
+  return (
+    <div style={styles.page}>
+      <div
+        className="spya-container"
+        style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 22,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                color: "#7c3aed",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 1.3,
+              }}
+            >
+              ADMIN ONLY
+            </div>
+            <h1 style={{ margin: "5px 0", fontSize: 30 }}>
+              Inventory Dashboard
+            </h1>
+            <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+              Token generation totals by dashboard, category and user.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setShowPasswordForm((v) => !v)}
+              style={{ ...styles.button, background: "#111827", color: "#fff" }}
+            >
+              Change Admin Password
+            </button>
+            <button
+              type="button"
+              onClick={onBack}
+              style={{
+                ...styles.button,
+                background: "#f1f5f9",
+                color: "#334155",
+              }}
+            >
+              Back to Dashboards
+            </button>
+          </div>
+        </div>
+
+        {showPasswordForm && (
+          <div
+            style={{
+              ...styles.card,
+              padding: 20,
+              marginBottom: 18,
+              maxWidth: 620,
+            }}
+          >
+            <h2 style={{ marginTop: 0, fontSize: 20 }}>
+              Change Admin Password
+            </h2>
+            <form onSubmit={submitPasswordChange}>
+              <Field label="Current Password">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  style={styles.input}
+                  required
+                />
+              </Field>
+              <Field label="New Password">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  style={styles.input}
+                  minLength={8}
+                  required
+                />
+              </Field>
+              <Field label="Confirm New Password">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={styles.input}
+                  minLength={8}
+                  required
+                />
+              </Field>
+              {passwordError && <ErrorText>{passwordError}</ErrorText>}
+              {passwordMessage && (
+                <div style={{ color: "#047857", fontSize: 13, marginTop: 8 }}>
+                  {passwordMessage}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={savingPassword}
+                style={{
+                  ...styles.button,
+                  background: "#7c3aed",
+                  color: "#fff",
+                  marginTop: 12,
+                }}
+              >
+                {savingPassword ? "Updating..." : "Update Password"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div style={{ ...styles.card, padding: 18, marginBottom: 18 }}>
+          <Field label="Select Dashboard">
+            <select
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              style={styles.input}
+            >
+              {dashboards.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.association_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {loadingInventory ? (
+          <div style={{ ...styles.card, padding: 24 }}>
+            Loading inventory...
+          </div>
+        ) : inventoryError ? (
+          <div style={{ ...styles.card, padding: 20 }}>
+            <ErrorText>{inventoryError}</ErrorText>
+          </div>
+        ) : (
+          inventory && (
+            <>
+              <h2 style={{ margin: "0 0 14px", fontSize: 22 }}>
+                {inventory.dashboard?.association_name}
+              </h2>
+              <div
+                className="spya-grid-4"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+                  gap: 10,
+                  marginBottom: 20,
+                }}
+              >
+                <Stat
+                  label="TOKENS EVER GENERATED"
+                  value={number(summary.tokens_ever_generated)}
+                />
+                <Stat
+                  label="ACTIVE TOKENS"
+                  value={number(summary.active_tokens)}
+                />
+                <Stat
+                  label="CANCELLED TOKENS"
+                  value={number(summary.cancelled_tokens)}
+                />
+                <Stat
+                  label="REGISTRATIONS"
+                  value={number(summary.registrations)}
+                />
+              </div>
+
+              <div
+                style={{
+                  ...styles.card,
+                  padding: 18,
+                  marginBottom: 18,
+                  overflowX: "auto",
+                }}
+              >
+                <h2 style={{ marginTop: 0, fontSize: 19 }}>
+                  Token Generation by User
+                </h2>
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: 720,
+                    borderCollapse: "collapse",
+                    fontSize: 13,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      <th style={th}>User</th>
+                      <th style={th}>Role</th>
+                      <th style={th}>Registrations</th>
+                      <th style={th}>Tokens Generated</th>
+                      <th style={th}>Active</th>
+                      <th style={th}>Cancelled</th>
+                      <th style={th}>Amount Received</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inventory.byUser || []).map((row) => (
+                      <tr key={row.user_id}>
+                        <td style={td}>{row.username}</td>
+                        <td style={td}>
+                          <span
+                            style={{
+                              background: row.isAdmin ? "#ede9fe" : "#f1f5f9",
+                              color: row.isAdmin ? "#6d28d9" : "#475569",
+                              padding: "4px 8px",
+                              borderRadius: 20,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {row.isAdmin ? "Admin" : "User"}
+                          </span>
+                        </td>
+                        <td style={td}>{number(row.registrations)}</td>
+                        <td style={td}>{number(row.tokens_ever_generated)}</td>
+                        <td style={td}>{number(row.active_tokens)}</td>
+                        <td style={td}>{number(row.cancelled_tokens)}</td>
+                        <td style={td}>₹{number(row.amount_received)}</td>
+                      </tr>
+                    ))}
+                    {!(inventory.byUser || []).length && (
+                      <tr>
+                        <td style={td} colSpan={7}>
+                          No token-generation data yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ ...styles.card, padding: 18, overflowX: "auto" }}>
+                <h2 style={{ marginTop: 0, fontSize: 19 }}>
+                  Inventory by Token Category
+                </h2>
+                <table
+                  style={{
+                    width: "100%",
+                    minWidth: 560,
+                    borderCollapse: "collapse",
+                    fontSize: 13,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      <th style={th}>Category</th>
+                      <th style={th}>Prefix</th>
+                      <th style={th}>Price</th>
+                      <th style={th}>Generated</th>
+                      <th style={th}>Active</th>
+                      <th style={th}>Cancelled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inventory.byCategory || []).map((row) => (
+                      <tr key={row.category_id}>
+                        <td style={td}>{row.category_name}</td>
+                        <td style={td}>{row.prefix}</td>
+                        <td style={td}>₹{number(row.price)}</td>
+                        <td style={td}>{number(row.tokens_ever_generated)}</td>
+                        <td style={td}>{number(row.active_tokens)}</td>
+                        <td style={td}>{number(row.cancelled_tokens)}</td>
+                      </tr>
+                    ))}
+                    {!(inventory.byCategory || []).length && (
+                      <tr>
+                        <td style={td} colSpan={6}>
+                          No categories configured.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminLoginModal({ onClose, onSuccess }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -2598,7 +3054,7 @@ export default function App() {
   const [dashboardDetails, setDashboardDetails] = useState(null);
   const [entries, setEntries] = useState([]);
   const [screen, setScreen] = useState("dashboards");
-  const adminReturnScreen = "dashboards";
+  const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
   const [successEntry, setSuccessEntry] = useState(null);
 
   async function loadAccount() {
@@ -2711,7 +3167,7 @@ export default function App() {
     );
   }
 
-  if (screen === "admin-setup") {
+  if (screen === "admin-setup" && auth.user?.role !== "user") {
     return (
       <>
         <style>{css}</style>
@@ -2760,7 +3216,7 @@ export default function App() {
     );
   }
 
-  if (screen === "admin-login") {
+  if (screen === "admin-login" && auth.user?.role !== "user") {
     return (
       <>
         <style>{css}</style>
@@ -2798,6 +3254,22 @@ export default function App() {
             </div>
           </div>
         </div>
+      </>
+    );
+  }
+
+  if (screen === "admin" && auth.user?.role !== "user" && getAdminToken()) {
+    return (
+      <>
+        <style>{css}</style>
+        <AdminDashboard
+          dashboards={dashboards}
+          onBack={() => setScreen("dashboards")}
+          onLogout={() => {
+            sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+            setScreen("dashboards");
+          }}
+        />
       </>
     );
   }
@@ -2937,6 +3409,11 @@ export default function App() {
         selected={selectedDashboard}
         user={auth.user}
         hasAdmin={auth.user?.role !== "user"}
+        onAdmin={() => setScreen("admin-login")}
+        onAdminSetup={() => {
+          setAdminReturnScreen("dashboards");
+          setScreen("admin-setup");
+        }}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
         onLogout={logout}
