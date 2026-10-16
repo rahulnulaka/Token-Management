@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
@@ -236,23 +236,6 @@ async function markRegistrationPrinted(dashboardId, registrationId) {
   );
 }
 
-async function getAdminRegistrations(dashboardId) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations`,
-    {},
-    getAdminToken(),
-  );
-}
-async function saveAdminNotes(dashboardId, registrationId, notes) {
-  return api(
-    `/api/v5/admin/dashboards/${dashboardId}/registrations/${registrationId}/notes`,
-    {
-      method: "POST",
-      body: JSON.stringify({ notes }),
-    },
-    getAdminToken(),
-  );
-}
 function tokenRange(entry) {
   if (!entry) return "";
   if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {
@@ -2005,8 +1988,7 @@ function UserDashboard({
 }) {
   const [filter, setFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
-
-  // Shared table-cell styling used throughout the registrations table.
+  // Shared table-cell styling used by the registrations table.
   const cell = {
     padding: "12px 10px",
     verticalAlign: "top",
@@ -2620,7 +2602,7 @@ export default function App() {
   const [dashboardDetails, setDashboardDetails] = useState(null);
   const [entries, setEntries] = useState([]);
   const [screen, setScreen] = useState("dashboards");
-  const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
+  const adminReturnScreen = "dashboards";
   const [successEntry, setSuccessEntry] = useState(null);
 
   async function loadAccount() {
