@@ -105,10 +105,6 @@ function getUserToken() {
   return sessionStorage.getItem(USER_TOKEN_KEY) || "";
 }
 
-function getAdminToken() {
-  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || getUserToken() || "";
-}
-
 async function registerUser(username, password) {
   return api("/api/v5/auth/register", {
     method: "POST",
