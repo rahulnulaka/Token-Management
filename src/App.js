@@ -1048,7 +1048,7 @@ function AdminCredentialsSetup({ onDone, onSkip }) {
   }
 
   return (
-    <Modal>
+    <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
       <h2 style={{ margin: 0 }}>Set Admin Credentials</h2>
       <p style={{ color: "#64748b", fontSize: 13 }}>
         One admin account is shared across all dashboards under your account.
@@ -1109,7 +1109,7 @@ function AdminCredentialsSetup({ onDone, onSkip }) {
           {loading ? "Saving..." : "Create Admin"}
         </button>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -2499,6 +2499,66 @@ function AdminReceived({
     return true;
   });
 
+  const inventory = Object.values(
+    entries.reduce((acc, entry) => {
+      const categories =
+        Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
+          ? entry.categoryEntries
+          : [
+              {
+                categoryName: entry.categoryName || "Uncategorized",
+                status: entry.status,
+                amount: entry.amount,
+                quantity: entry.quantity,
+              },
+            ];
+      categories.forEach((cat) => {
+        const name = cat.categoryName || "Uncategorized";
+        if (!acc[name])
+          acc[name] = {
+            name,
+            orders: 0,
+            activeOrders: 0,
+            cancelledOrders: 0,
+            quantity: 0,
+            activeQuantity: 0,
+            cancelledQuantity: 0,
+            orderValue: 0,
+            received: 0,
+            pending: 0,
+            printed: 0,
+            notPrinted: 0,
+          };
+        const row = acc[name];
+        const qty = Math.max(1, Number(cat.quantity || entry.quantity || 1));
+        const amount = Number(cat.amount ?? entry.amount ?? 0) || 0;
+        const cancelled =
+          cat.status === "Cancelled" ||
+          (entry.status === "Cancelled" && !entry.categoryEntries?.length);
+        row.orders += 1;
+        row.quantity += qty;
+        row.orderValue += amount;
+        if (cancelled) {
+          row.cancelledOrders += 1;
+          row.cancelledQuantity += qty;
+        } else {
+          row.activeOrders += 1;
+          row.activeQuantity += qty;
+          if (
+            entry.status === "Payment Not Received" ||
+            cat.status === "Payment Not Received"
+          )
+            row.pending += amount;
+          else row.received += amount;
+        }
+        if ((entry.printStatus || "Not Yet Printed") === "Complete")
+          row.printed += 1;
+        else row.notPrinted += 1;
+      });
+      return acc;
+    }, {}),
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
   async function changeStatus(entry, status) {
     try {
       await onStatusChange(activeDashboard.id, entry, status);
@@ -2652,6 +2712,123 @@ function AdminReceived({
                 value={`₹${Number(value || 0).toFixed(2)}`}
               />
             ),
+          )}
+        </div>
+
+        <div style={{ ...styles.card, marginBottom: 18, overflow: "hidden" }}>
+          <div style={{ padding: 18, borderBottom: "1px solid #eef2f7" }}>
+            <div
+              style={{
+                color: "#7c3aed",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 1.2,
+              }}
+            >
+              ADMIN ONLY
+            </div>
+            <h2 style={{ margin: "5px 0" }}>📦 Inventory Dashboard</h2>
+            <p style={{ margin: 0, color: "#64748b", fontSize: 12 }}>
+              Category-wise inventory, active and cancelled token quantities,
+              payment totals, and print status for the selected dashboard.
+            </p>
+          </div>
+          <div
+            className="spya-grid-4"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+              gap: 10,
+              padding: 14,
+            }}
+          >
+            <Stat label="CATEGORIES" value={inventory.length} />
+            <Stat
+              label="TOTAL TOKEN QTY"
+              value={inventory.reduce((n, x) => n + x.quantity, 0)}
+            />
+            <Stat
+              label="ACTIVE TOKEN QTY"
+              value={inventory.reduce((n, x) => n + x.activeQuantity, 0)}
+            />
+            <Stat
+              label="CANCELLED TOKEN QTY"
+              value={inventory.reduce((n, x) => n + x.cancelledQuantity, 0)}
+            />
+          </div>
+          {inventory.length ? (
+            <div className="spya-table-wrap" style={{ overflowX: "auto" }}>
+              <table
+                className="spya-table"
+                style={{
+                  width: "100%",
+                  minWidth: 1000,
+                  borderCollapse: "collapse",
+                  fontSize: 12,
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: "#f8fafc",
+                      color: "#64748b",
+                      fontSize: 10,
+                    }}
+                  >
+                    {[
+                      "CATEGORY",
+                      "ORDERS",
+                      "ACTIVE",
+                      "CANCELLED",
+                      "TOTAL QTY",
+                      "ACTIVE QTY",
+                      "CANCELLED QTY",
+                      "ORDER VALUE",
+                      "RECEIVED",
+                      "PENDING PAYMENT",
+                      "PRINTED / NOT PRINTED",
+                    ].map((label) => (
+                      <th
+                        key={label}
+                        style={{
+                          padding: "11px 12px",
+                          textAlign: "left",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventory.map((row) => (
+                    <tr
+                      key={row.name}
+                      style={{ borderTop: "1px solid #f1f5f9" }}
+                    >
+                      <td style={{ ...cell, fontWeight: 800 }}>{row.name}</td>
+                      <td style={cell}>{row.orders}</td>
+                      <td style={cell}>{row.activeOrders}</td>
+                      <td style={cell}>{row.cancelledOrders}</td>
+                      <td style={cell}>{row.quantity}</td>
+                      <td style={cell}>{row.activeQuantity}</td>
+                      <td style={cell}>{row.cancelledQuantity}</td>
+                      <td style={cell}>₹{row.orderValue.toFixed(2)}</td>
+                      <td style={cell}>₹{row.received.toFixed(2)}</td>
+                      <td style={cell}>₹{row.pending.toFixed(2)}</td>
+                      <td style={cell}>
+                        {row.printed} / {row.notPrinted}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ padding: 24, color: "#94a3b8" }}>
+              No inventory data available yet.
+            </div>
           )}
         </div>
 
@@ -2877,44 +3054,75 @@ function AdminReceived({
                         />
                       </td>
                       <td style={cell}>
-                        <div
-                          style={{ display: "flex", gap: 5, flexWrap: "wrap" }}
-                        >
-                          {entry.status !== "Cancelled" && (
-                            <select
-                              value={
-                                entry.status === "Partially Cancelled"
-                                  ? "Complete"
-                                  : entry.status
-                              }
-                              onChange={(e) =>
-                                changeStatus(entry, e.target.value)
+                        <div style={{ display: "grid", gap: 7, minWidth: 135 }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              width: "fit-content",
+                              borderRadius: 999,
+                              padding: "5px 8px",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color:
+                                (entry.printStatus || "Not Yet Printed") ===
+                                "Complete"
+                                  ? "#047857"
+                                  : "#b45309",
+                              background:
+                                (entry.printStatus || "Not Yet Printed") ===
+                                "Complete"
+                                  ? "#d1fae5"
+                                  : "#fef3c7",
+                            }}
+                          >
+                            {entry.printStatus || "Not Yet Printed"}
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 5,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {entry.status !== "Cancelled" && (
+                              <select
+                                value={
+                                  entry.status === "Partially Cancelled"
+                                    ? "Complete"
+                                    : entry.status
+                                }
+                                onChange={(e) =>
+                                  changeStatus(entry, e.target.value)
+                                }
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  borderRadius: 7,
+                                  padding: 5,
+                                  fontSize: 10,
+                                }}
+                              >
+                                <option>Complete</option>
+                                <option>Payment Not Received</option>
+                              </select>
+                            )}
+                            <button
+                              onClick={() =>
+                                onReprint(
+                                  entry,
+                                  activeDashboard.association_name,
+                                )
                               }
                               style={{
-                                border: "1px solid #d1d5db",
-                                borderRadius: 7,
-                                padding: 5,
+                                ...styles.button,
+                                padding: "6px 8px",
+                                background: "#111827",
+                                color: "#fff",
                                 fontSize: 10,
                               }}
                             >
-                              <option>Complete</option>
-                              <option>Payment Not Received</option>
-                            </select>
-                          )}
-                          <button
-                            onClick={() =>
-                              onReprint(entry, activeDashboard.association_name)
-                            }
-                            style={{
-                              ...styles.button,
-                              padding: "6px 8px",
-                              background: "#111827",
-                              color: "#fff",
-                              fontSize: 10,
-                            }}
-                          >
-                            🖨️
-                          </button>
+                              🖨️
+                            </button>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -3277,6 +3485,7 @@ export default function App() {
         onCreate={() => setScreen("create-dashboard")}
         onAdmin={() => {
           setAdminReturnScreen("dashboards");
+          setShowAdminSetup(false);
           setShowAdminLogin(false);
           if (!auth.adminUsername) setScreen("admin-setup");
           else if (getAdminToken()) setScreen("admin");
