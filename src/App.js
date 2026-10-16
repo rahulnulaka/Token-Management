@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const USER_TOKEN_KEY = "spya_v5_user_token";
-const ADMIN_TOKEN_KEY = "spya_v5_admin_token";
 
 const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
 
@@ -105,10 +104,6 @@ function getUserToken() {
   return sessionStorage.getItem(USER_TOKEN_KEY) || "";
 }
 
-function getAdminToken() {
-  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || getUserToken() || "";
-}
-
 async function registerUser(username, password) {
   return api("/api/v5/auth/register", {
     method: "POST",
@@ -140,24 +135,6 @@ async function createDashboard(payload) {
     },
     getUserToken(),
   );
-}
-
-async function createAdminCredentials(username, password) {
-  return api(
-    "/api/v5/admin/credentials",
-    {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    },
-    getUserToken(),
-  );
-}
-
-async function adminLogin(username, password) {
-  return api("/api/v5/admin/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
 }
 
 async function getDashboardDetails(dashboardId) {
@@ -240,17 +217,17 @@ async function getAdminInventory(dashboardId) {
   return api(
     `/api/v5/admin/dashboards/${dashboardId}/inventory`,
     {},
-    getAdminToken(),
+    getUserToken(),
   );
 }
 async function changeAdminPassword(currentPassword, newPassword) {
   return api(
-    "/api/v5/admin/change-password",
+    "/api/v5/account/change-password",
     {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     },
-    getAdminToken(),
+    getUserToken(),
   );
 }
 function tokenRange(entry) {
@@ -991,103 +968,6 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
   );
 }
 
-function AdminCredentialsSetup({ onDone, onSkip }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function submit() {
-    if (!username.trim() || password.length < 8) {
-      setError(
-        "Username is required and password must be at least 8 characters.",
-      );
-      return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-      await createAdminCredentials(username.trim(), password);
-      onDone();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
-      <h2 style={{ margin: 0 }}>Set Admin Credentials</h2>
-      <p style={{ color: "#64748b", fontSize: 13 }}>
-        One admin account is shared across all dashboards under your account.
-      </p>
-
-      <Field label="Admin Username">
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          style={styles.input}
-          placeholder="admin"
-        />
-      </Field>
-      <Field label="Password">
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={styles.input}
-        />
-      </Field>
-      <Field label="Confirm Password">
-        <input
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          style={styles.input}
-        />
-      </Field>
-
-      {error && <ErrorText>{error}</ErrorText>}
-
-      <div
-        className="spya-actions"
-        style={{ display: "flex", gap: 10, marginTop: 20 }}
-      >
-        <button
-          onClick={onSkip}
-          style={{
-            ...styles.button,
-            flex: 1,
-            background: "#f3f4f6",
-            color: "#374151",
-          }}
-        >
-          Later
-        </button>
-        <button
-          onClick={submit}
-          disabled={loading}
-          style={{
-            ...styles.button,
-            flex: 1,
-            background: "#111827",
-            color: "#fff",
-          }}
-        >
-          {loading ? "Saving..." : "Create Admin"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function Modal({ children }) {
   return (
     <div
@@ -1119,7 +999,6 @@ function DashboardHome({
   user,
   hasAdmin,
   onAdmin,
-  onAdminSetup,
 }) {
   return (
     <div style={styles.page}>
@@ -1162,17 +1041,6 @@ function DashboardHome({
                   }}
                 >
                   Admin Portal
-                </button>
-                <button
-                  type="button"
-                  onClick={onAdminSetup}
-                  style={{
-                    ...styles.button,
-                    background: "#f3f4f6",
-                    color: "#374151",
-                  }}
-                >
-                  Set Admin Credentials
                 </button>
               </>
             )}
@@ -2626,13 +2494,14 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
     try {
       setSavingPassword(true);
       const result = await changeAdminPassword(currentPassword, newPassword);
-      setPasswordMessage(result.message || "Password changed successfully.");
+      setPasswordMessage(
+        result.message || "Account password changed successfully.",
+      );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
       alert(
-        "Admin password changed. Please log in again using your new password.",
+        "Your account password has changed. Please log in again using your new password.",
       );
       onLogout();
     } catch (error) {
@@ -2697,7 +2566,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               onClick={() => setShowPasswordForm((v) => !v)}
               style={{ ...styles.button, background: "#111827", color: "#fff" }}
             >
-              Change Admin Password
+              Change Account Password
             </button>
             <button
               type="button"
@@ -2723,7 +2592,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
             }}
           >
             <h2 style={{ marginTop: 0, fontSize: 20 }}>
-              Change Admin Password
+              Change Account Password
             </h2>
             <form onSubmit={submitPasswordChange}>
               <Field label="Current Password">
@@ -2953,79 +2822,6 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
   );
 }
 
-function AdminLoginModal({ onClose, onSuccess }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function submit() {
-    try {
-      setLoading(true);
-      setError("");
-      const result = await adminLogin(username.trim(), password);
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, result.token);
-      onSuccess(result);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Modal>
-      <h2 style={{ margin: 0 }}>Admin Login</h2>
-      <p style={{ color: "#64748b", fontSize: 13 }}>
-        Access Admin Received for all dashboards under your account.
-      </p>
-      <Field label="Username">
-        <input
-          autoFocus
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          style={styles.input}
-        />
-      </Field>
-      <Field label="Password">
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={styles.input}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      </Field>
-      {error && <ErrorText>{error}</ErrorText>}
-      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button
-          onClick={onClose}
-          style={{
-            ...styles.button,
-            flex: 1,
-            background: "#f3f4f6",
-            color: "#374151",
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={submit}
-          disabled={loading}
-          style={{
-            ...styles.button,
-            flex: 1,
-            background: "#111827",
-            color: "#fff",
-          }}
-        >
-          {loading ? "Checking..." : "Login"}
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
 /* Legacy standalone Admin Received component removed; admin tools belong inside dashboard. */
 
 export default function App() {
@@ -3037,7 +2833,6 @@ export default function App() {
   const [dashboardDetails, setDashboardDetails] = useState(null);
   const [entries, setEntries] = useState([]);
   const [screen, setScreen] = useState("dashboards");
-  const [adminReturnScreen, setAdminReturnScreen] = useState("dashboards");
   const [successEntry, setSuccessEntry] = useState(null);
 
   async function loadAccount() {
@@ -3098,7 +2893,6 @@ export default function App() {
 
   function logout() {
     sessionStorage.removeItem(USER_TOKEN_KEY);
-    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
     setAuth(null);
     setDashboards([]);
     setSelectedDashboard(null);
@@ -3150,108 +2944,14 @@ export default function App() {
     );
   }
 
-  if (screen === "admin-setup" && auth.user?.role !== "user") {
-    return (
-      <>
-        <style>{css}</style>
-        <div style={styles.page}>
-          <div
-            className="spya-container"
-            style={{ ...styles.container, paddingTop: 24, paddingBottom: 48 }}
-          >
-            <button
-              type="button"
-              onClick={() => setScreen(adminReturnScreen)}
-              style={{
-                ...styles.button,
-                background: "transparent",
-                color: "#64748b",
-                paddingLeft: 0,
-              }}
-            >
-              ← Back
-            </button>
-            <div style={{ ...styles.card, padding: 24, marginTop: 12 }}>
-              <AdminCredentialsSetup
-                onDone={async () => {
-                  sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-                  try {
-                    const me = await getMe();
-                    setAuth(me);
-                    setDashboards(me.dashboards || []);
-                    setScreen("admin-login");
-                  } catch (e) {
-                    alert(
-                      `Admin credentials were created, but account details could not be refreshed: ${e.message}`,
-                    );
-                    setScreen(adminReturnScreen);
-                  }
-                }}
-                onSkip={() => {
-                  sessionStorage.setItem("spya_v5_admin_setup_seen", "1");
-                  setScreen(adminReturnScreen);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (screen === "admin-login" && auth.user?.role !== "user") {
-    return (
-      <>
-        <style>{css}</style>
-        <div style={styles.page}>
-          <div
-            className="spya-container"
-            style={{ ...styles.container, paddingTop: 24, paddingBottom: 48 }}
-          >
-            <button
-              type="button"
-              onClick={() => setScreen(adminReturnScreen)}
-              style={{
-                ...styles.button,
-                background: "transparent",
-                color: "#64748b",
-                paddingLeft: 0,
-              }}
-            >
-              ← Back
-            </button>
-            <div
-              style={{
-                ...styles.card,
-                padding: 24,
-                marginTop: 12,
-                maxWidth: 520,
-                marginLeft: "auto",
-                marginRight: "auto",
-              }}
-            >
-              <AdminLoginModal
-                onClose={() => setScreen(adminReturnScreen)}
-                onSuccess={() => setScreen("admin")}
-              />
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (screen === "admin" && auth.user?.role !== "user" && getAdminToken()) {
+  if (screen === "admin" && auth.user?.role !== "user") {
     return (
       <>
         <style>{css}</style>
         <AdminDashboard
           dashboards={dashboards}
           onBack={() => setScreen("dashboards")}
-          onLogout={() => {
-            sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-            setScreen("dashboards");
-          }}
+          onLogout={logout}
         />
       </>
     );
@@ -3392,11 +3092,7 @@ export default function App() {
         selected={selectedDashboard}
         user={auth.user}
         hasAdmin={auth.user?.role !== "user"}
-        onAdmin={() => setScreen("admin-login")}
-        onAdminSetup={() => {
-          setAdminReturnScreen("dashboards");
-          setScreen("admin-setup");
-        }}
+        onAdmin={() => setScreen("admin")}
         onSelect={openDashboard}
         onCreate={() => setScreen("create-dashboard")}
         onLogout={logout}

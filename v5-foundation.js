@@ -97,16 +97,20 @@ function requireUser(req, res, next) {
   next();
 }
 
-function requireAdmin(req, res, next) {
+function requireOwner(req, res, next) {
   const p = verifyToken(bearer(req));
 
-  if (!p || p.type !== "admin")
-    return res.status(401).json({ error: "V5 admin authentication required." });
+  if (!p || p.type !== "user" || !p.sub || (p.role && p.role === "user")) {
+    return res
+      .status(401)
+      .json({ error: "Owner account authentication required." });
+  }
 
+  // The existing main account is the owner/admin. No separate admin token is used.
+  req.v5UserId = p.sub;
+  req.v5Role = p.role || "owner";
   req.v5AdminUserId = p.sub;
-
-  req.v5AdminId = p.adminId;
-
+  req.v5AdminId = null;
   next();
 }
 
@@ -218,9 +222,8 @@ module.exports = function registerV5(app) {
 
       const userToken = token({
         type: "user",
-
+        role: "owner",
         sub: user.id,
-
         exp: Date.now() + USER_TOKEN_TTL_MS,
       });
 
@@ -233,9 +236,9 @@ module.exports = function registerV5(app) {
 
         dashboards: [],
 
-        hasAdmin: false,
+        hasAdmin: true,
 
-        adminUsername: null,
+        adminUsername: user.username,
 
         dashboardLimit: MAX_DASHBOARDS_PER_USER,
       });
@@ -386,171 +389,7 @@ ORDER BY d.created_at`,
       });
     }),
   ); // ------------------------------------------------------------
-  // ONE ADMIN ACCOUNT PER USER
-  // ------------------------------------------------------------
-
-  app.post(
-    "/api/v5/admin/credentials",
-
-    requireUser,
-
-    asyncRoute(async (req, res) => {
-      const db = requireDb();
-
-      const username = String(req.body?.username || "").trim();
-
-      const password = validatePassword(req.body?.password);
-
-      if (!/^[A-Za-z0-9_.-]{4,40}$/.test(username)) {
-        return res.status(400).json({
-          error: "Admin username must be 4-40 characters.",
-        });
-      }
-
-      const existingForUser = (
-        await db.query("SELECT id FROM admin_accounts WHERE user_id=$1", [
-          req.v5UserId,
-        ])
-      ).rows[0];
-
-      if (existingForUser) {
-        return res.status(409).json({
-          error: "Admin credentials already exist.",
-        });
-      }
-
-      const existingUsername = (
-        await db.query("SELECT id FROM admin_accounts WHERE username=$1", [
-          username,
-        ])
-      ).rows[0];
-
-      if (existingUsername) {
-        return res.status(409).json({
-          error: "That admin username is already in use.",
-        });
-      }
-
-      const row = (
-        await db.query(
-          `INSERT INTO admin_accounts(user_id,username,password_hash)
-
-VALUES($1,$2,$3)
-
-RETURNING id,username`,
-
-          [req.v5UserId, username, hashPassword(password)],
-        )
-      ).rows[0];
-
-      res.status(201).json({ success: true, admin: row });
-    }),
-  );
-
-  app.post(
-    "/api/v5/admin/login",
-
-    asyncRoute(async (req, res) => {
-      const db = requireDb();
-
-      const username = String(req.body?.username || "").trim();
-
-      const password = String(req.body?.password || "");
-
-      const admin = (
-        await db.query(
-          `SELECT id,user_id,username,password_hash
-
-FROM admin_accounts
-
-WHERE username=$1
-
-LIMIT 1`,
-
-          [username],
-        )
-      ).rows[0];
-
-      if (!admin || !checkPassword(password, admin.password_hash)) {
-        return res.status(401).json({ error: "Invalid admin credentials." });
-      }
-
-      const dashboards = (
-        await db.query(
-          `SELECT id,association_name
-
-FROM dashboards
-
-WHERE user_id=$1 AND archived_at IS NULL
-
-ORDER BY created_at`,
-
-          [admin.user_id],
-        )
-      ).rows;
-
-      res.json({
-        success: true,
-
-        token: token({
-          type: "admin",
-
-          sub: admin.user_id,
-
-          adminId: admin.id,
-
-          exp: Date.now() + 8 * 3600000,
-        }),
-
-        admin: {
-          id: admin.id,
-
-          username: admin.username,
-
-          userId: admin.user_id,
-        },
-
-        dashboards,
-      });
-    }),
-  ); // ------------------------------------------------------------
-  // ADMIN PASSWORD CHANGE
-  // ------------------------------------------------------------
-  app.post(
-    "/api/v5/admin/change-password",
-    requireAdmin,
-    asyncRoute(async (req, res) => {
-      const db = requireDb();
-      const currentPassword = String(req.body?.currentPassword || "");
-      const newPassword = validatePassword(req.body?.newPassword);
-      const admin = (
-        await db.query(
-          "SELECT id,user_id,password_hash FROM admin_accounts WHERE id=$1 AND user_id=$2 LIMIT 1",
-          [req.v5AdminId, req.v5AdminUserId],
-        )
-      ).rows[0];
-
-      if (!admin || !checkPassword(currentPassword, admin.password_hash)) {
-        return res
-          .status(400)
-          .json({ error: "Current password is incorrect." });
-      }
-      if (currentPassword === newPassword) {
-        return res.status(400).json({
-          error: "New password must be different from the current password.",
-        });
-      }
-
-      await db.query(
-        "UPDATE admin_accounts SET password_hash=$1 WHERE id=$2 AND user_id=$3",
-        [hashPassword(newPassword), admin.id, admin.user_id],
-      );
-      res.json({
-        success: true,
-        message: "Admin password changed successfully. Please log in again.",
-      });
-    }),
-  );
+  // The main user account is the owner/admin; no separate admin account is created.
 
   // DASHBOARDS
   // ------------------------------------------------------------
@@ -809,6 +648,11 @@ ORDER BY d.created_at`,
           .status(400)
           .json({ error: "Current password is incorrect." });
       }
+      if (current === next) {
+        return res.status(400).json({
+          error: "New password must be different from the current password.",
+        });
+      }
       await db.query("UPDATE users SET password_hash=$1 WHERE id=$2", [
         hashPassword(next),
         req.v5UserId,
@@ -959,7 +803,7 @@ ORDER BY d.created_at`,
   // Only authenticated admins can access this endpoint.
   app.get(
     "/api/v5/admin/dashboards/:dashboardId/inventory",
-    requireAdmin,
+    requireOwner,
     asyncRoute(async (req, res) => {
       const db = requireDb();
       const dashboardId = req.params.dashboardId;

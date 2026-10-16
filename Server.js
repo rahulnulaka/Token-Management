@@ -1495,6 +1495,9 @@ function requireV5AdminRoute(req, res, next) {
           .status(403)
           .json({ error: "Only the dashboard owner can perform this action." });
       }
+      req.v5UserId = payload.sub;
+      req.v5Role = payload.role || "owner";
+      req.v5DashboardId = payload.dashboardId || null;
       req.v5AdminUserId = payload.sub;
       req.v5AdminId = null;
       next();
