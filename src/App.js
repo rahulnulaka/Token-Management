@@ -2301,29 +2301,31 @@ function UserDashboard({
                               minWidth: 0,
                             }}
                           >
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                borderRadius: 999,
-                                padding: "5px 9px",
-                                fontSize: 10,
-                                fontWeight: 800,
-                                whiteSpace: "nowrap",
-                                color:
-                                  (entry.printStatus || "Not Yet Printed") ===
-                                  "Complete"
-                                    ? "#047857"
-                                    : "#b45309",
-                                background:
-                                  (entry.printStatus || "Not Yet Printed") ===
-                                  "Complete"
-                                    ? "#d1fae5"
-                                    : "#fef3c7",
-                              }}
-                            >
-                              {entry.printStatus || "Not Yet Printed"}
-                            </span>
+                            {entry.status !== "Complete" && (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  borderRadius: 999,
+                                  padding: "5px 9px",
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  whiteSpace: "nowrap",
+                                  color:
+                                    (entry.printStatus || "Not Yet Printed") ===
+                                    "Complete"
+                                      ? "#047857"
+                                      : "#b45309",
+                                  background:
+                                    (entry.printStatus || "Not Yet Printed") ===
+                                    "Complete"
+                                      ? "#d1fae5"
+                                      : "#fef3c7",
+                                }}
+                              >
+                                {entry.printStatus || "Not Yet Printed"}
+                              </span>
+                            )}
                             <div
                               style={{
                                 display: "flex",
@@ -2354,22 +2356,22 @@ function UserDashboard({
                                   <option>Payment Not Received</option>
                                 </select>
                               )}
-                              { entry.status !== "Cancelled" && (
-                              <button
-                                onClick={() => onReprint(entry)}
-                                title="Print / reprint labels"
-                                aria-label="Print or reprint labels"
-                                style={{
-                                  ...styles.button,
-                                  padding: "7px 9px",
-                                  background: "#111827",
-                                  color: "#fff",
-                                  fontSize: 11,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                🖨️
-                              </button>
+                              {entry.status !== "Cancelled" && (
+                                <button
+                                  onClick={() => onReprint(entry)}
+                                  title="Print / reprint labels"
+                                  aria-label="Print or reprint labels"
+                                  style={{
+                                    ...styles.button,
+                                    padding: "7px 9px",
+                                    background: "#111827",
+                                    color: "#fff",
+                                    fontSize: 11,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  🖨️
+                                </button>
                               )}
                             </div>
                           </div>
