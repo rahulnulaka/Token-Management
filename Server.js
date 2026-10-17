@@ -1939,7 +1939,7 @@ function combineV5RegistrationEntries(entries) {
     tokenEnd: tokenLabels.join(" + "),
     categoryEntries: categories,
     printStatus:
-      activeCategories.length > 0 &&
+      activeCategories.length === 0 ||
       activeCategories.every((c) => c.printStatus === "Complete")
         ? "Complete"
         : "Not Yet Printed",
@@ -2326,7 +2326,7 @@ app.post(
       const groupId = String(target.registration_group_id || target.id);
       const updated = (
         await client.query(
-          `UPDATE registrations SET status='Cancelled', cancelled_at=NOW() WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
+          `UPDATE registrations SET status='Cancelled', cancelled_at=NOW(), print_status='Complete' WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
           [target.id, dashboard.id],
         )
       ).rows;
@@ -2578,7 +2578,7 @@ app.post(
       const groupId = String(target.registration_group_id || target.id);
       const updated = (
         await client.query(
-          `UPDATE registrations SET status='Cancelled',cancelled_at=NOW() WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
+          `UPDATE registrations SET status='Cancelled',cancelled_at=NOW(),print_status='Complete' WHERE id=$1 AND dashboard_id=$2 AND status <> 'Cancelled' RETURNING *`,
           [target.id, req.params.dashboardId],
         )
       ).rows;

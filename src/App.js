@@ -2301,7 +2301,7 @@ function UserDashboard({
                               minWidth: 0,
                             }}
                           >
-                            {entry.status !== "Complete" && (
+                            {entry.status !== "Cancelled" && (
                               <span
                                 style={{
                                   display: "inline-flex",
