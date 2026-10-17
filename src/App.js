@@ -2246,7 +2246,9 @@ function UserDashboard({
                                       : categoryEntry.tokenStart}
                                   </strong>
                                 </span>
-                                <StatusBadge status={categoryEntry.status} />
+                                {categoryEntry.status !== "Complete" && (
+                                  <StatusBadge status={categoryEntry.status} />
+                                )}
                                 {categoryEntry.status !== "Cancelled" && (
                                   <button
                                     type="button"
