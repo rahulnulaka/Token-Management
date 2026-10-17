@@ -2354,6 +2354,7 @@ function UserDashboard({
                                   <option>Payment Not Received</option>
                                 </select>
                               )}
+                              { entry.status !== "Cancelled" && (
                               <button
                                 onClick={() => onReprint(entry)}
                                 title="Print / reprint labels"
@@ -2369,6 +2370,7 @@ function UserDashboard({
                               >
                                 🖨️
                               </button>
+                              )}
                             </div>
                           </div>
                           {category && (
