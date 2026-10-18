@@ -2351,11 +2351,92 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
     ? statusDetails.filter((row) => row.status === selectedActionStatus)
     : [];
   const notPrintedSummary = inventory?.printSummary || {};
-  const notPrintedRows = statusDetails.filter(
-    (row) =>
-      (row.print_status || "Not Yet Printed") === "Not Yet Printed" &&
-      row.status !== "Cancelled",
-  );
+  // Match the Registrations screen: combine category rows into one printable
+  // registration, while keeping the underlying category IDs for status updates.
+  const registrationGroups = new Map();
+  for (const row of statusDetails) {
+    const key = String(row.registration_group_id || row.id);
+    if (!registrationGroups.has(key)) registrationGroups.set(key, []);
+    registrationGroups.get(key).push(row);
+  }
+  const notPrintedRows = [...registrationGroups.values()]
+    .map((groupRows) => {
+      const activeRows = groupRows.filter((row) => row.status !== "Cancelled");
+      if (!activeRows.length) return null;
+      const needsPrinting = activeRows.some(
+        (row) => (row.print_status || "Not Yet Printed") !== "Complete",
+      );
+      if (!needsPrinting) return null;
+      const first = activeRows[0];
+      const categories = activeRows.map((row) => {
+        const prefix = String(row.prefix || "");
+        const start = `${prefix}${String(row.token_start ?? "").padStart(4, "0")}`;
+        const end = `${prefix}${String(row.token_end ?? row.token_start ?? "").padStart(4, "0")}`;
+        return {
+          id: row.id,
+          categoryName: row.category_name || "",
+          prefix,
+          tokenStart: start,
+          tokenEnd: end,
+          status: row.status,
+        };
+      });
+      const created = first.created_at ? new Date(first.created_at) : null;
+      const printEntry = {
+        id: first.id,
+        groupId: first.registration_group_id || first.id,
+        orderId: `ORD${String(first.order_number || "").padStart(4, "0")}`,
+        categoryEntries: categories,
+        categoryName: categories.map((c) => c.categoryName).join(" + "),
+        tokenType: categories.map((c) => c.categoryName).join(" + "),
+        quantity: Number(first.quantity) || 1,
+        name: first.customer_name || "",
+        phone: first.customer_phone || "",
+        payment: first.payment_mode || "",
+        amount: activeRows.reduce(
+          (sum, row) => sum + Number(row.amount || 0),
+          0,
+        ),
+        status: activeRows.some((row) => row.status === "Payment Not Received")
+          ? "Payment Not Received"
+          : "Complete",
+        printStatus: "Not Yet Printed",
+        date:
+          created && !Number.isNaN(created.getTime())
+            ? created.toLocaleDateString("en-IN")
+            : "",
+        time:
+          created && !Number.isNaN(created.getTime())
+            ? created.toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
+        createdAt: first.created_at,
+      };
+      return {
+        ...first,
+        id: first.id,
+        order_number: first.order_number,
+        customer_name: first.customer_name,
+        customer_phone: first.customer_phone,
+        category_name: categories.map((c) => c.categoryName).join(" + "),
+        quantity: Number(first.quantity) || 0,
+        amount: printEntry.amount,
+        status: printEntry.status,
+        print_status: "Not Yet Printed",
+        tokenDisplay: categories
+          .map((c) =>
+            c.tokenStart === c.tokenEnd
+              ? c.tokenStart
+              : `${c.tokenStart}–${c.tokenEnd}`,
+          )
+          .join(" + "),
+        created_by: first.created_by,
+        printEntry,
+      };
+    })
+    .filter(Boolean);
   const number = (value) => Number(value || 0).toLocaleString("en-IN");
   const th = {
     textAlign: "left",
@@ -2384,11 +2465,8 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
         ORD{String(row.order_number || "").padStart(4, "0")}
       </div>
       <div style={{ color: "#5b6a63", marginTop: 3 }}>
-        {row.prefix || ""}
-        {row.token_start || ""}
-        {row.token_end && row.token_end !== row.token_start
-          ? `–${row.prefix || ""}${row.token_end}`
-          : ""}
+        {row.tokenDisplay ||
+          `${row.prefix || ""}${row.token_start || ""}${row.token_end && row.token_end !== row.token_start ? `–${row.prefix || ""}${row.token_end}` : ""}`}
       </div>
     </td>
   );
@@ -2754,6 +2832,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                         <th style={th}>Print Status</th>
                         <th style={th}>Created By</th>
                         <th style={th}>Created At</th>
+                        <th style={th}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2771,11 +2850,49 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                           </td>
                           <td style={td}>{row.created_by || "—"}</td>
                           <td style={td}>{createdAt(row)}</td>
+                          <td style={td}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const opened = printLabels(
+                                  row.printEntry,
+                                  inventory?.dashboard?.association_name ||
+                                    "SPYA",
+                                );
+                                if (!opened) return;
+                                try {
+                                  await markRegistrationPrinted(
+                                    selectedId,
+                                    row.id,
+                                  );
+                                  const refreshed =
+                                    await getAdminInventory(selectedId);
+                                  setInventory(refreshed);
+                                } catch (error) {
+                                  alert(
+                                    `Labels were opened for printing, but print status could not be saved: ${error.message}`,
+                                  );
+                                }
+                              }}
+                              style={{
+                                border: "1px solid #cbd5cf",
+                                background: "#ffffff",
+                                color: "#26372f",
+                                borderRadius: 8,
+                                padding: "7px 10px",
+                                cursor: "pointer",
+                                fontWeight: 700,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              🖨️ Print
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {!notPrintedRows.length && (
                         <tr>
-                          <td style={td} colSpan={10}>
+                          <td style={td} colSpan={11}>
                             All active tokens have been marked as printed.
                           </td>
                         </tr>
