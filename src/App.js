@@ -4,7 +4,7 @@ const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const USER_TOKEN_KEY = "spya_v5_user_token";
 
-const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
+// const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
 
 const styles = {
   page: {
@@ -1298,9 +1298,9 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                           : "1px solid #e5e7eb",
                       }}
                     >
-                      <div style={{ fontSize: 20 }}>
+                      {/* <div style={{ fontSize: 20 }}>
                         {DEFAULT_ICONS[index % DEFAULT_ICONS.length]}
-                      </div>
+                      </div> */}
                       <div style={{ marginTop: 5, fontWeight: 800 }}>
                         {selected ? "✓ " : ""}
                         {item.name}
