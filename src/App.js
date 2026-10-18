@@ -4,57 +4,72 @@ const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const USER_TOKEN_KEY = "spya_v5_user_token";
 
-// const DEFAULT_ICONS = ["🎯", "🥻", "🥈", "🎟️", "⭐", "🎁"];
+/* ---------- Design tokens ---------- */
+const INK = "#14211c";
+const GREEN = "#0f5c4d";
+const GREEN_SOFT = "#e6f2ef";
+const HEAD_FONT = "'Bricolage Grotesque','Public Sans',sans-serif";
 
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg,#f8fafc 0%,#f5f3ff 100%)",
-    fontFamily: "'Inter','Segoe UI',Arial,sans-serif",
-    color: "#111827",
+    background: "#eef1ee",
+    fontFamily: "'Public Sans','Segoe UI',Arial,sans-serif",
+    color: INK,
   },
-  container: {
-    width: "min(1180px,calc(100% - 32px))",
-    margin: "0 auto",
-  },
+  container: { width: "min(1180px,calc(100% - 32px))", margin: "0 auto" },
   card: {
     background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 20,
-    boxShadow: "0 10px 35px rgba(15,23,42,.06)",
+    border: "1px solid #dde3de",
+    borderRadius: 14,
+    boxShadow: "0 1px 2px rgba(20,33,28,.06)",
   },
   input: {
     width: "100%",
     padding: "12px 14px",
-    borderRadius: 11,
-    border: "1px solid #d1d5db",
-    fontSize: 14,
-    outline: "none",
+    minHeight: 44,
+    borderRadius: 10,
+    border: "1px solid #c3ccc5",
+    background: "#fff",
+    fontSize: 15,
     boxSizing: "border-box",
     fontFamily: "inherit",
+    color: INK,
   },
   button: {
     border: "none",
     cursor: "pointer",
-    borderRadius: 11,
+    borderRadius: 10,
     fontWeight: 700,
     fontSize: 14,
-    padding: "11px 15px",
+    padding: "11px 16px",
+    minHeight: 40,
   },
   label: {
     display: "block",
-    fontSize: 12,
-    fontWeight: 800,
-    color: "#374151",
-    marginBottom: 7,
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#3b4a43",
+    marginBottom: 6,
   },
 };
 
 const css = `
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Public+Sans:wght@400;500;600;700;800&display=swap');
 * { box-sizing: border-box; }
 html, body, #root { margin:0; min-height:100%; width:100%; }
-body { overflow-x:hidden; }
+body { overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 button,input,select,textarea { font:inherit; max-width:100%; }
+h1, h2 { font-family:${HEAD_FONT}; letter-spacing:-.02em; }
+button { transition:filter .12s, transform .12s; }
+button:not(:disabled):hover { filter:brightness(.94); }
+button:not(:disabled):active { transform:translateY(1px); }
+button:disabled { cursor:not-allowed; }
+input:focus, select:focus, textarea:focus { border-color:${GREEN}!important; box-shadow:0 0 0 3px rgba(15,92,77,.18); outline:none; }
+button:focus-visible, select:focus-visible { outline:3px solid ${GREEN}; outline-offset:2px; }
+.spya-table thead th { position:sticky; top:0; z-index:1; background:#f4f6f4!important; color:#4b5a53; font-size:11px!important; letter-spacing:.04em; }
+.spya-table tbody tr:hover td { background:#f7faf7; }
+.spya-table td { font-size:13px; }
 @media(max-width:768px) {
   .spya-container { width:100%!important; padding:12px!important; }
   .spya-grid-2 { grid-template-columns:1fr!important; }
@@ -67,8 +82,10 @@ button,input,select,textarea { font:inherit; max-width:100%; }
   .spya-grid-4 { grid-template-columns:1fr!important; }
   .spya-actions { flex-direction:column!important; }
 }
+@media(prefers-reduced-motion:reduce) { * { transition:none!important; } }
 `;
 
+/* ---------- API ---------- */
 async function api(path, options = {}, token = null) {
   const headers = {
     ...(options.headers || {}),
@@ -76,10 +93,7 @@ async function api(path, options = {}, token = null) {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(`${API}${path}`, { ...options, headers });
 
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json")
@@ -104,43 +118,27 @@ function getUserToken() {
   return sessionStorage.getItem(USER_TOKEN_KEY) || "";
 }
 
+const post = (path, body, token) =>
+  api(path, { method: "POST", body: JSON.stringify(body) }, token);
+
 async function registerUser(username, password) {
-  return api("/api/v5/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
+  return post("/api/v5/auth/register", { username, password });
 }
-
 async function loginUser(username, password) {
-  return api("/api/v5/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
+  return post("/api/v5/auth/login", { username, password });
 }
-
 async function getMe() {
   return api("/api/v5/me", {}, getUserToken());
 }
-
 async function getDashboards() {
   return api("/api/v5/dashboards", {}, getUserToken());
 }
-
 async function createDashboard(payload) {
-  return api(
-    "/api/v5/dashboards",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-    getUserToken(),
-  );
+  return post("/api/v5/dashboards", payload, getUserToken());
 }
-
 async function getDashboardDetails(dashboardId) {
   return api(`/api/v5/token/dashboards/${dashboardId}`, {}, getUserToken());
 }
-
 async function getRegistrations(dashboardId) {
   return api(
     `/api/v5/dashboards/${dashboardId}/registrations`,
@@ -148,71 +146,51 @@ async function getRegistrations(dashboardId) {
     getUserToken(),
   );
 }
-
 async function getDashboardMembers(dashboardId) {
   return api(`/api/v5/dashboards/${dashboardId}/members`, {}, getUserToken());
 }
-
 async function createDashboardMember(dashboardId, username, password) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/members`,
-    {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    },
+    { username, password },
     getUserToken(),
   );
 }
-
 async function resetDashboardMemberPassword(dashboardId, userId, password) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/members/${userId}/reset-password`,
-    {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    },
+    { password },
     getUserToken(),
   );
 }
-
 async function createRegistration(dashboardId, payload) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/registrations`,
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
+    payload,
     getUserToken(),
   );
 }
-
 async function updateRegistrationStatus(dashboardId, registrationId, status) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/status`,
-    {
-      method: "POST",
-      body: JSON.stringify({ status }),
-    },
+    { status },
     getUserToken(),
   );
 }
-
 async function cancelRegistration(dashboardId, registrationId) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/cancel`,
-    { method: "POST", body: JSON.stringify({}) },
+    {},
     getUserToken(),
   );
 }
-
 async function markRegistrationPrinted(dashboardId, registrationId) {
-  return api(
+  return post(
     `/api/v5/dashboards/${dashboardId}/registrations/${registrationId}/printed`,
-    { method: "POST", body: JSON.stringify({}) },
+    {},
     getUserToken(),
   );
 }
-
 async function getAdminInventory(dashboardId) {
   return api(
     `/api/v5/admin/dashboards/${dashboardId}/inventory`,
@@ -221,15 +199,14 @@ async function getAdminInventory(dashboardId) {
   );
 }
 async function changeAdminPassword(currentPassword, newPassword) {
-  return api(
+  return post(
     "/api/v5/account/change-password",
-    {
-      method: "POST",
-      body: JSON.stringify({ currentPassword, newPassword }),
-    },
+    { currentPassword, newPassword },
     getUserToken(),
   );
 }
+
+/* ---------- Helpers ---------- */
 function tokenRange(entry) {
   if (!entry) return "";
   if (Array.isArray(entry.categoryEntries) && entry.categoryEntries.length) {
@@ -279,30 +256,40 @@ function entryMatchesDateFilter(entry, dateFilter) {
   return true;
 }
 
+function hasActiveCategory(entry) {
+  return (
+    Array.isArray(entry?.categoryEntries) &&
+    entry.categoryEntries.some((category) => category.status !== "Cancelled")
+  );
+}
+
+function activeCategories(entry) {
+  return Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
+    ? entry.categoryEntries.filter(
+        (category) => category.status !== "Cancelled",
+      )
+    : [
+        {
+          categoryName: entry.categoryName || entry.tokenType || "",
+          prefix: entry.prefix || "",
+          tokenStart: entry.tokenStart,
+          tokenEnd: entry.tokenEnd,
+        },
+      ];
+}
+
+function serialFor(value, offset) {
+  const serial = Number(String(value || "").match(/(\d+)$/)?.[1] || 0) + offset;
+  const prefix = String(value || "").replace(/\d+$/, "");
+  return `${prefix}${String(serial).padStart(4, "0")}`;
+}
+
 function printLabels(entry, associationName = "SPYA") {
-  if (
-    entry?.status === "Cancelled" &&
-    !(
-      Array.isArray(entry.categoryEntries) &&
-      entry.categoryEntries.some((category) => category.status !== "Cancelled")
-    )
-  ) {
+  if (entry?.status === "Cancelled" && !hasActiveCategory(entry)) {
     alert("This token has no active categories to print.");
     return;
   }
-  const categories =
-    Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
-      ? entry.categoryEntries.filter(
-          (category) => category.status !== "Cancelled",
-        )
-      : [
-          {
-            categoryName: entry.categoryName || entry.tokenType || "",
-            prefix: entry.prefix || "",
-            tokenStart: entry.tokenStart,
-            tokenEnd: entry.tokenEnd,
-          },
-        ];
+  const categories = activeCategories(entry);
   if (!categories.length) {
     alert("This combined token has no active categories to print.");
     return;
@@ -315,12 +302,6 @@ function printLabels(entry, associationName = "SPYA") {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-  const serialFor = (value, offset) => {
-    const serial =
-      Number(String(value || "").match(/(\d+)$/)?.[1] || 0) + offset;
-    const prefix = String(value || "").replace(/\d+$/, "");
-    return `${prefix}${String(serial).padStart(4, "0")}`;
-  };
   const labels = Array.from({ length: quantity }, (_, index) => {
     const ids = categories.map((category) =>
       serialFor(category.tokenStart, index),
@@ -360,13 +341,7 @@ function printLabels(entry, associationName = "SPYA") {
 }
 
 function sendWhatsAppMessage(entry, associationName = "SPYA") {
-  if (
-    entry?.status === "Cancelled" &&
-    !(
-      Array.isArray(entry.categoryEntries) &&
-      entry.categoryEntries.some((category) => category.status !== "Cancelled")
-    )
-  ) {
+  if (entry?.status === "Cancelled" && !hasActiveCategory(entry)) {
     alert("This token has no active categories to send.");
     return;
   }
@@ -380,29 +355,12 @@ function sendWhatsAppMessage(entry, associationName = "SPYA") {
     );
     return;
   }
-  const categories =
-    Array.isArray(entry.categoryEntries) && entry.categoryEntries.length
-      ? entry.categoryEntries.filter(
-          (category) => category.status !== "Cancelled",
-        )
-      : [
-          {
-            categoryName: entry.categoryName || entry.tokenType || "",
-            tokenStart: entry.tokenStart,
-            prefix: entry.prefix || "",
-          },
-        ];
+  const categories = activeCategories(entry);
   if (!categories.length) {
     alert("This combined token has no active categories to send.");
     return;
   }
   const quantity = Math.max(1, Number(entry.quantity) || 1);
-  const serialFor = (value, offset) => {
-    const serial =
-      Number(String(value || "").match(/(\d+)$/)?.[1] || 0) + offset;
-    const prefix = String(value || "").replace(/\d+$/, "");
-    return `${prefix}${String(serial).padStart(4, "0")}`;
-  };
   const tokens = Array.from({ length: quantity }, (_, i) =>
     categories.map((c) => serialFor(c.tokenStart, i)).join(" + "),
   );
@@ -424,6 +382,7 @@ function sendWhatsAppMessage(entry, associationName = "SPYA") {
   );
 }
 
+/* ---------- Shared UI ---------- */
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 15 }}>
@@ -435,12 +394,110 @@ function Field({ label, children }) {
 
 function ErrorText({ children }) {
   return (
-    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 6 }}>
+    <div style={{ color: "#b3261e", fontSize: 13, marginTop: 6 }}>
       {children}
     </div>
   );
 }
 
+function Modal({ children }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(20,33,28,.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          ...styles.card,
+          width: "min(520px,100%)",
+          padding: 24,
+          boxShadow: "0 20px 50px rgba(0,0,0,.25)",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }) {
+  return (
+    <div style={{ ...styles.card, padding: "14px 16px" }}>
+      <div style={{ fontSize: 12, color: "#5b6a63", fontWeight: 600 }}>
+        {label.charAt(0) + label.slice(1).toLowerCase()}
+      </div>
+      <div
+        style={{
+          fontSize: 30,
+          fontWeight: 800,
+          marginTop: 4,
+          color: tone === "warn" ? "#a85d00" : INK,
+          fontVariantNumeric: "tabular-nums",
+          fontFamily: HEAD_FONT,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const tones = {
+    Cancelled: ["#fbe9e7", "#a32d1f", "#d9534a"],
+    "Partially Cancelled": ["#fdf0dc", "#8a4b00", "#e8a200"],
+    "Payment Not Received": ["#fdf0dc", "#8a4b00", "#e8a200"],
+  };
+  const [bg, fg, dot] = tones[status] || [GREEN_SOFT, "#0b4a3d", "#1b9a7e"];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 9px",
+        borderRadius: 999,
+        fontWeight: 700,
+        fontSize: 11,
+        whiteSpace: "nowrap",
+        background: bg,
+        color: fg,
+      }}
+    >
+      <span
+        style={{ width: 6, height: 6, borderRadius: 99, background: dot }}
+      />
+      {status}
+    </span>
+  );
+}
+
+const ghostBtn = { ...styles.button, background: "#f1f4f1", color: "#34443c" };
+const inkBtn = { ...styles.button, background: INK, color: "#fff" };
+const greenBtn = { ...styles.button, background: GREEN, color: "#fff" };
+const dangerSoftBtn = {
+  ...styles.button,
+  background: "#fbe9e7",
+  color: "#a32d1f",
+};
+const backBtn = {
+  ...styles.button,
+  background: "transparent",
+  color: "#5b6a63",
+  paddingLeft: 0,
+};
+
+/* ---------- Login ---------- */
 function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
@@ -508,6 +565,8 @@ function LoginScreen({ onLogin }) {
     }
   }
 
+  const onEnter = (e) => e.key === "Enter" && submit();
+
   return (
     <div style={styles.page}>
       <div
@@ -525,14 +584,15 @@ function LoginScreen({ onLogin }) {
               style={{
                 width: 58,
                 height: 58,
-                borderRadius: 18,
-                background: "linear-gradient(135deg,#111827,#4c1d95)",
+                borderRadius: 16,
+                background: INK,
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 24,
-                fontWeight: 900,
+                fontSize: 26,
+                fontWeight: 800,
+                fontFamily: HEAD_FONT,
                 margin: "0 auto 14px",
               }}
             >
@@ -543,11 +603,11 @@ function LoginScreen({ onLogin }) {
               SPYA
             </div>
 
-            <h1 style={{ margin: "8px 0 5px", fontSize: 27 }}>
+            <h1 style={{ margin: "8px 0 5px", fontSize: 28 }}>
               {mode === "login" ? "Welcome back" : "Create your account"}
             </h1>
 
-            <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            <p style={{ margin: 0, color: "#5b6a63", fontSize: 14 }}>
               {mode === "login"
                 ? "Sign in with your User ID and password."
                 : "Create a User ID and password to start using SPYA."}
@@ -566,7 +626,7 @@ function LoginScreen({ onLogin }) {
               placeholder="e.g. rahul123"
               maxLength={40}
               style={styles.input}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              onKeyDown={onEnter}
             />
           </Field>
 
@@ -581,7 +641,7 @@ function LoginScreen({ onLogin }) {
               placeholder="Minimum 8 characters"
               maxLength={128}
               style={styles.input}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              onKeyDown={onEnter}
             />
           </Field>
 
@@ -595,7 +655,7 @@ function LoginScreen({ onLogin }) {
                 placeholder="Re-enter your password"
                 maxLength={128}
                 style={styles.input}
-                onKeyDown={(e) => e.key === "Enter" && submit()}
+                onKeyDown={onEnter}
               />
             </Field>
           )}
@@ -604,10 +664,9 @@ function LoginScreen({ onLogin }) {
             onClick={submit}
             disabled={loading}
             style={{
-              ...styles.button,
+              ...inkBtn,
               width: "100%",
-              background: "#111827",
-              color: "#fff",
+              minHeight: 46,
               opacity: loading ? 0.7 : 1,
             }}
           >
@@ -624,7 +683,7 @@ function LoginScreen({ onLogin }) {
             style={{
               marginTop: 18,
               textAlign: "center",
-              color: "#64748b",
+              color: "#5b6a63",
               fontSize: 13,
             }}
           >
@@ -641,7 +700,7 @@ function LoginScreen({ onLogin }) {
                 padding: 0,
                 marginLeft: 6,
                 background: "transparent",
-                color: "#4c1d95",
+                color: GREEN,
               }}
             >
               {mode === "login" ? "Create one" : "Sign in"}
@@ -651,8 +710,8 @@ function LoginScreen({ onLogin }) {
           {message && (
             <div
               style={{
-                color: "#047857",
-                fontSize: 12,
+                color: "#0b4a3d",
+                fontSize: 13,
                 marginTop: 10,
                 textAlign: "center",
               }}
@@ -666,7 +725,7 @@ function LoginScreen({ onLogin }) {
           <div
             style={{
               marginTop: 22,
-              color: "#94a3b8",
+              color: "#8a968f",
               fontSize: 11,
               textAlign: "center",
             }}
@@ -679,6 +738,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+/* ---------- Dashboard setup ---------- */
 function DashboardSetup({ onCreated, onCancel, existingCount }) {
   const [associationName, setAssociationName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -767,20 +827,13 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
         style={{ ...styles.container, paddingTop: 25, paddingBottom: 50 }}
       >
         <div style={{ ...styles.card, padding: 28 }}>
-          <div
-            style={{
-              fontSize: 12,
-              color: "#7c3aed",
-              fontWeight: 900,
-              letterSpacing: 1.3,
-            }}
-          >
-            DASHBOARD {existingCount + 1} OF 2
+          <div style={{ fontSize: 13, color: GREEN, fontWeight: 700 }}>
+            Dashboard {existingCount + 1} of 2
           </div>
-          <h1 style={{ margin: "7px 0", fontSize: 28 }}>
+          <h1 style={{ margin: "7px 0", fontSize: 30 }}>
             Create your dashboard
           </h1>
-          <p style={{ color: "#64748b", fontSize: 13, marginTop: 0 }}>
+          <p style={{ color: "#5b6a63", fontSize: 14, marginTop: 0 }}>
             Define the association details and token categories for this
             dashboard.
           </p>
@@ -841,11 +894,12 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
               style={{
                 marginTop: 8,
                 marginBottom: 12,
-                fontSize: 16,
-                fontWeight: 900,
+                fontSize: 17,
+                fontWeight: 800,
+                fontFamily: HEAD_FONT,
               }}
             >
-              Token Categories
+              Token categories
             </div>
 
             {categories.map((category, index) => (
@@ -858,8 +912,8 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
                   gap: 10,
                   alignItems: "end",
                   padding: 13,
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 14,
+                  border: "1px solid #dde3de",
+                  borderRadius: 12,
                   marginBottom: 10,
                 }}
               >
@@ -902,9 +956,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
                   onClick={() => removeCategory(index)}
                   disabled={categories.length === 1}
                   style={{
-                    ...styles.button,
-                    background: "#fef2f2",
-                    color: "#b91c1c",
+                    ...dangerSoftBtn,
                     marginBottom: 15,
                     opacity: categories.length === 1 ? 0.4 : 1,
                   }}
@@ -917,11 +969,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
             <button
               type="button"
               onClick={addCategory}
-              style={{
-                ...styles.button,
-                background: "#f5f3ff",
-                color: "#6d28d9",
-              }}
+              style={{ ...styles.button, background: GREEN_SOFT, color: GREEN }}
             >
               + Add Category
             </button>
@@ -938,26 +986,11 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
               }}
             >
               {onCancel && (
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  style={{
-                    ...styles.button,
-                    background: "#f3f4f6",
-                    color: "#374151",
-                  }}
-                >
+                <button type="button" onClick={onCancel} style={ghostBtn}>
                   Cancel
                 </button>
               )}
-              <button
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  background: "#111827",
-                  color: "#fff",
-                }}
-              >
+              <button disabled={loading} style={inkBtn}>
                 {loading ? "Creating..." : "Create Dashboard"}
               </button>
             </div>
@@ -968,28 +1001,7 @@ function DashboardSetup({ onCreated, onCancel, existingCount }) {
   );
 }
 
-function Modal({ children }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 100,
-        background: "rgba(15,23,42,.55)",
-        backdropFilter: "blur(5px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-      }}
-    >
-      <div style={{ ...styles.card, width: "min(520px,100%)", padding: 28 }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
+/* ---------- Dashboard home ---------- */
 function DashboardHome({
   dashboards,
   selected,
@@ -1017,9 +1029,18 @@ function DashboardHome({
           }}
         >
           <div>
-            <div style={{ fontWeight: 900, letterSpacing: 1.5 }}>SPYA</div>
-            <div style={{ color: "#94a3b8", fontSize: 10, letterSpacing: 1 }}>
-              TOKEN MANAGEMENT V5
+            <div
+              style={{
+                fontWeight: 800,
+                letterSpacing: 1.5,
+                fontFamily: HEAD_FONT,
+                fontSize: 20,
+              }}
+            >
+              SPYA
+            </div>
+            <div style={{ color: "#8a968f", fontSize: 11 }}>
+              Token management v5
             </div>
           </div>
           <div
@@ -1031,49 +1052,25 @@ function DashboardHome({
             }}
           >
             {hasAdmin && (
-              <>
-                <button
-                  type="button"
-                  onClick={onAdmin}
-                  style={{
-                    ...styles.button,
-                    background: "#111827",
-                    color: "#fff",
-                  }}
-                >
-                  Admin Portal
-                </button>
-              </>
+              <button type="button" onClick={onAdmin} style={inkBtn}>
+                Admin Portal
+              </button>
             )}
-            <span style={{ color: "#64748b", fontSize: 12 }}>
+            <span style={{ color: "#5b6a63", fontSize: 13 }}>
               {user?.username || user?.email || "User"}
             </span>
-            <button
-              onClick={onLogout}
-              style={{
-                ...styles.button,
-                background: "#f3f4f6",
-                color: "#374151",
-              }}
-            >
+            <button onClick={onLogout} style={ghostBtn}>
               Logout
             </button>
           </div>
         </div>
 
         <div style={{ marginBottom: 25 }}>
-          <div
-            style={{
-              color: "#7c3aed",
-              fontWeight: 900,
-              fontSize: 12,
-              letterSpacing: 1.5,
-            }}
-          >
-            WELCOME TO SPYA
+          <div style={{ color: GREEN, fontWeight: 700, fontSize: 13 }}>
+            Your association
           </div>
-          <h1 style={{ margin: "5px 0", fontSize: 34 }}>Your Dashboards</h1>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
+          <h1 style={{ margin: "5px 0", fontSize: 36 }}>Your Dashboards</h1>
+          <p style={{ margin: 0, color: "#5b6a63", fontSize: 14 }}>
             Each dashboard has its own association details, categories, prices
             and registrations.
           </p>
@@ -1098,31 +1095,24 @@ function DashboardHome({
                 cursor: "pointer",
                 border:
                   selected?.id === dashboard.id
-                    ? "2px solid #7c3aed"
-                    : "1px solid #e5e7eb",
+                    ? `2px solid ${GREEN}`
+                    : "1px solid #dde3de",
                 background: "#fff",
               }}
             >
-              <div
-                style={{
-                  color: "#7c3aed",
-                  fontSize: 11,
-                  fontWeight: 900,
-                  letterSpacing: 1,
-                }}
-              >
-                DASHBOARD {index + 1}
+              <div style={{ color: GREEN, fontSize: 12, fontWeight: 700 }}>
+                Dashboard {index + 1}
               </div>
-              <h2 style={{ margin: "8px 0", fontSize: 21 }}>
+              <h2 style={{ margin: "8px 0", fontSize: 22 }}>
                 {dashboard.association_name}
               </h2>
-              <div style={{ color: "#64748b", fontSize: 12 }}>
+              <div style={{ color: "#5b6a63", fontSize: 13 }}>
                 {dashboard.contact_email ||
                   dashboard.contact_phone ||
                   "No contact details"}
               </div>
-              <div style={{ marginTop: 18, color: "#111827", fontWeight: 800 }}>
-                Open Dashboard →
+              <div style={{ marginTop: 18, color: INK, fontWeight: 800 }}>
+                Open dashboard
               </div>
             </button>
           ))}
@@ -1134,16 +1124,16 @@ function DashboardHome({
                 ...styles.card,
                 padding: 24,
                 textAlign: "left",
-                border: "1px dashed #c4b5fd",
-                background: "#faf5ff",
+                border: "1px dashed #8fc2b6",
+                background: "#f1f7f5",
                 cursor: "pointer",
               }}
             >
-              <div style={{ fontSize: 30 }}>＋</div>
-              <h2 style={{ margin: "8px 0", fontSize: 20 }}>
+              <div style={{ fontSize: 30, color: GREEN }}>＋</div>
+              <h2 style={{ margin: "8px 0", fontSize: 21 }}>
                 Create Dashboard
               </h2>
-              <div style={{ color: "#64748b", fontSize: 12 }}>
+              <div style={{ color: "#5b6a63", fontSize: 13 }}>
                 {2 - dashboards.length} dashboard slot remaining.
               </div>
             </button>
@@ -1154,6 +1144,7 @@ function DashboardHome({
   );
 }
 
+/* ---------- Registration form ---------- */
 function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState(
     categories[0]?.id ? [categories[0].id] : [],
@@ -1230,38 +1221,32 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
     }
   }
 
+  const stepBtn = {
+    ...styles.button,
+    background: "#f4f6f4",
+    border: "1px solid #c3ccc5",
+    minHeight: 44,
+    minWidth: 48,
+  };
+  const textArea = { ...styles.input, resize: "vertical" };
+
   return (
     <div style={styles.page}>
       <div
         className="spya-container"
         style={{ ...styles.container, paddingTop: 20, paddingBottom: 50 }}
       >
-        <button
-          onClick={onBack}
-          style={{
-            ...styles.button,
-            background: "transparent",
-            color: "#64748b",
-            paddingLeft: 0,
-          }}
-        >
+        <button onClick={onBack} style={backBtn}>
           ← {dashboard.association_name}
         </button>
         <div style={{ ...styles.card, padding: 26, marginTop: 10 }}>
-          <div
-            style={{
-              color: "#7c3aed",
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: 1.3,
-            }}
-          >
-            NEW REGISTRATION
+          <div style={{ color: GREEN, fontSize: 13, fontWeight: 700 }}>
+            New registration
           </div>
-          <h1 style={{ margin: "6px 0 3px", fontSize: 27 }}>
-            Create Combined Token
+          <h1 style={{ margin: "6px 0 3px", fontSize: 29 }}>
+            Create combined token
           </h1>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: 0, color: "#5b6a63", fontSize: 14 }}>
             Select one or more categories. Each customer gets one combined
             label; each category is saved as its own registration row.
           </p>
@@ -1274,12 +1259,13 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                   gap: 8,
                 }}
               >
-                {categories.map((item, index) => {
+                {categories.map((item) => {
                   const selected = selectedCategoryIds.includes(item.id);
                   return (
                     <button
                       type="button"
                       key={item.id}
+                      aria-pressed={selected}
                       onClick={() =>
                         setSelectedCategoryIds((current) =>
                           selected
@@ -1291,21 +1277,18 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                         ...styles.button,
                         padding: 14,
                         textAlign: "left",
-                        background: selected ? "#f5f3ff" : "#f8fafc",
-                        color: selected ? "#6d28d9" : "#334155",
+                        background: selected ? GREEN_SOFT : "#f7f9f7",
+                        color: selected ? GREEN : "#34443c",
                         border: selected
-                          ? "2px solid #a78bfa"
-                          : "1px solid #e5e7eb",
+                          ? `2px solid ${GREEN}`
+                          : "1px solid #dde3de",
                       }}
                     >
-                      {/* <div style={{ fontSize: 20 }}>
-                        {DEFAULT_ICONS[index % DEFAULT_ICONS.length]}
-                      </div> */}
-                      <div style={{ marginTop: 5, fontWeight: 800 }}>
+                      <div style={{ fontWeight: 800 }}>
                         {selected ? "✓ " : ""}
                         {item.name}
                       </div>
-                      <div style={{ fontSize: 11, marginTop: 3 }}>
+                      <div style={{ fontSize: 12, marginTop: 3 }}>
                         ₹{Number(item.price).toFixed(2)} · {item.prefix}
                       </div>
                     </button>
@@ -1326,15 +1309,11 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                   <div style={{ display: "flex" }}>
                     <button
                       type="button"
+                      aria-label="Decrease quantity"
                       onClick={() =>
                         setQuantity((q) => Math.max(1, Number(q) - 1))
                       }
-                      style={{
-                        ...styles.button,
-                        borderRadius: "10px 0 0 10px",
-                        background: "#f8fafc",
-                        border: "1px solid #d1d5db",
-                      }}
+                      style={{ ...stepBtn, borderRadius: "10px 0 0 10px" }}
                     >
                       −
                     </button>
@@ -1353,15 +1332,11 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     />
                     <button
                       type="button"
+                      aria-label="Increase quantity"
                       onClick={() =>
                         setQuantity((q) => Math.min(9999, Number(q || 1) + 1))
                       }
-                      style={{
-                        ...styles.button,
-                        borderRadius: "0 10px 10px 0",
-                        background: "#f8fafc",
-                        border: "1px solid #d1d5db",
-                      }}
+                      style={{ ...stepBtn, borderRadius: "0 10px 10px 0" }}
                     >
                       +
                     </button>
@@ -1373,11 +1348,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Rahul, Priya, Kiran"
                     rows={3}
-                    style={{
-                      ...styles.input,
-                      minHeight: 80,
-                      resize: "vertical",
-                    }}
+                    style={{ ...textArea, minHeight: 80 }}
                   />
                 </Field>
                 <Field label="Phone Numbers *">
@@ -1386,13 +1357,9 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="9876543210, 9876543211, 9876543212"
                     rows={3}
-                    style={{
-                      ...styles.input,
-                      minHeight: 80,
-                      resize: "vertical",
-                    }}
+                    style={{ ...textArea, minHeight: 80 }}
                   />
-                  <div style={{ color: "#64748b", fontSize: 11, marginTop: 5 }}>
+                  <div style={{ color: "#5b6a63", fontSize: 12, marginTop: 5 }}>
                     Match each phone number to the name in the same position.
                   </div>
                 </Field>
@@ -1404,11 +1371,7 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Optional; separate emails with commas"
                     rows={2}
-                    style={{
-                      ...styles.input,
-                      minHeight: 60,
-                      resize: "vertical",
-                    }}
+                    style={{ ...textArea, minHeight: 60 }}
                   />
                 </Field>
                 <Field label="Payment Mode *">
@@ -1429,13 +1392,13 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                         onClick={() => setPayment(mode)}
                         style={{
                           ...styles.button,
-                          minHeight: 48,
+                          minHeight: 52,
                           border:
                             payment === mode
-                              ? "2px solid #7c3aed"
-                              : "1px solid #d1d5db",
-                          background: payment === mode ? "#f5f3ff" : "#fff",
-                          color: payment === mode ? "#6d28d9" : "#334155",
+                              ? `2px solid ${GREEN}`
+                              : "1px solid #c3ccc5",
+                          background: payment === mode ? GREEN_SOFT : "#fff",
+                          color: payment === mode ? GREEN : "#34443c",
                         }}
                       >
                         {payment === mode ? "✓ " : ""}
@@ -1446,27 +1409,36 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                 </Field>
                 <div
                   style={{
-                    background: "#f8fafc",
-                    borderRadius: 13,
+                    background: "#f4f6f4",
+                    border: "1px solid #dde3de",
+                    borderRadius: 12,
                     padding: 16,
                     marginTop: 8,
                   }}
                 >
                   <div style={{ fontWeight: 800, marginBottom: 8 }}>
-                    Order Summary
+                    Order summary
                   </div>
-                  <div style={{ color: "#64748b", fontSize: 13 }}>
+                  <div style={{ color: "#5b6a63", fontSize: 13 }}>
                     Categories:{" "}
                     {selectedCategories.map((c) => c.name).join(" + ") ||
                       "None selected"}
                   </div>
-                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 5 }}>
+                  <div style={{ color: "#5b6a63", fontSize: 13, marginTop: 5 }}>
                     Customers: {names.length}
                   </div>
-                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 5 }}>
+                  <div style={{ color: "#5b6a63", fontSize: 13, marginTop: 5 }}>
                     Amount per customer: ₹{amountPerCustomer.toFixed(2)}
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 900, marginTop: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 800,
+                      marginTop: 8,
+                      fontFamily: HEAD_FONT,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
                     Total: ₹{(amountPerCustomer * names.length).toFixed(2)}
                   </div>
                 </div>
@@ -1474,12 +1446,14 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
             </div>
             {error && (
               <div
+                role="alert"
                 style={{
-                  color: "#b91c1c",
-                  background: "#fef2f2",
+                  color: "#a32d1f",
+                  background: "#fbe9e7",
                   padding: 12,
                   borderRadius: 10,
                   marginTop: 12,
+                  fontSize: 14,
                 }}
               >
                 {error}
@@ -1493,26 +1467,13 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
                 marginTop: 22,
               }}
             >
-              <button
-                type="button"
-                onClick={onBack}
-                style={{
-                  ...styles.button,
-                  background: "#f3f4f6",
-                  color: "#374151",
-                }}
-              >
+              <button type="button" onClick={onBack} style={ghostBtn}>
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                style={{
-                  ...styles.button,
-                  background: "#6d28d9",
-                  color: "#fff",
-                  flex: 1,
-                }}
+                style={{ ...greenBtn, flex: 1, minHeight: 48 }}
               >
                 {loading
                   ? "Creating tokens..."
@@ -1526,25 +1487,25 @@ function RegistrationForm({ dashboard, categories, onBack, onSaved }) {
   );
 }
 
+/* ---------- Success modal ---------- */
 function SuccessModal({ entry, associationName, onClose }) {
   const entries = Array.isArray(entry) ? entry : [entry];
+  const row = {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: 5,
+    fontSize: 14,
+  };
   return (
     <Modal>
       <div
         style={{ textAlign: "center", maxHeight: "80vh", overflowY: "auto" }}
       >
-        <div style={{ fontSize: 42, color: "#059669" }}>✓</div>
-        <div
-          style={{
-            color: "#64748b",
-            fontSize: 11,
-            fontWeight: 900,
-            letterSpacing: 1.2,
-          }}
-        >
-          REGISTRATION COMPLETE
+        <div style={{ fontSize: 42, color: "#1b9a7e" }}>✓</div>
+        <div style={{ fontSize: 20, fontWeight: 800, fontFamily: HEAD_FONT }}>
+          Tokens created
         </div>
-        <p style={{ color: "#64748b", fontSize: 13, margin: "8px 0 18px" }}>
+        <p style={{ color: "#5b6a63", fontSize: 14, margin: "8px 0 18px" }}>
           {entries.length} customer token{entries.length === 1 ? "" : "s"}{" "}
           created. Print or send each customer their own combined token details.
         </p>
@@ -1552,8 +1513,9 @@ function SuccessModal({ entry, associationName, onClose }) {
           <div
             key={item.groupId || item.id}
             style={{
-              background: "#f8fafc",
-              borderRadius: 13,
+              background: "#f4f6f4",
+              border: "1px solid #dde3de",
+              borderRadius: 12,
               padding: 15,
               textAlign: "left",
               margin: "12px 0",
@@ -1561,7 +1523,7 @@ function SuccessModal({ entry, associationName, onClose }) {
           >
             <div
               style={{
-                fontSize: 20,
+                fontSize: 28,
                 fontFamily: "monospace",
                 fontWeight: 900,
                 textAlign: "center",
@@ -1573,50 +1535,26 @@ function SuccessModal({ entry, associationName, onClose }) {
             <div
               style={{
                 textAlign: "center",
-                color: "#64748b",
-                fontSize: 12,
+                color: "#5b6a63",
+                fontSize: 13,
                 marginBottom: 8,
               }}
             >
               {item.categoryName} · Order {item.orderId}
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: 5,
-              }}
-            >
+            <div style={row}>
               <span>Name</span>
               <strong>{item.name}</strong>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: 5,
-              }}
-            >
+            <div style={row}>
               <span>Phone</span>
               <strong>{item.phone}</strong>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: 5,
-              }}
-            >
+            <div style={row}>
               <span>Payment</span>
               <strong>{item.payment}</strong>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: 5,
-              }}
-            >
+            <div style={row}>
               <span>Amount</span>
               <strong>₹{Number(item.amount).toFixed(2)}</strong>
             </div>
@@ -1631,12 +1569,7 @@ function SuccessModal({ entry, associationName, onClose }) {
               <button
                 type="button"
                 onClick={() => printLabels(item, associationName)}
-                style={{
-                  ...styles.button,
-                  flex: "1 1 120px",
-                  background: "#111827",
-                  color: "#fff",
-                }}
+                style={{ ...inkBtn, flex: "1 1 120px" }}
               >
                 🖨️ Print Labels
               </button>
@@ -1646,7 +1579,7 @@ function SuccessModal({ entry, associationName, onClose }) {
                 style={{
                   ...styles.button,
                   flex: "1 1 160px",
-                  background: "#16a34a",
+                  background: "#1f8a4c",
                   color: "#fff",
                 }}
               >
@@ -1658,12 +1591,7 @@ function SuccessModal({ entry, associationName, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          style={{
-            ...styles.button,
-            background: "#f3f4f6",
-            color: "#374151",
-            marginTop: 8,
-          }}
+          style={{ ...ghostBtn, marginTop: 8 }}
         >
           Done
         </button>
@@ -1672,6 +1600,7 @@ function SuccessModal({ entry, associationName, onClose }) {
   );
 }
 
+/* ---------- Dashboard users panel ---------- */
 function DashboardUsersPanel({ dashboardId }) {
   const [open, setOpen] = useState(false);
   const [members, setMembers] = useState([]);
@@ -1752,8 +1681,8 @@ function DashboardUsersPanel({ dashboardId }) {
         }}
       >
         <div>
-          <div style={{ fontWeight: 900 }}>Dashboard Users</div>
-          <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+          <div style={{ fontWeight: 800 }}>Dashboard users</div>
+          <div style={{ color: "#5b6a63", fontSize: 13, marginTop: 4 }}>
             Create up to 2 individual logins for this dashboard and reset their
             passwords.
           </div>
@@ -1765,13 +1694,13 @@ function DashboardUsersPanel({ dashboardId }) {
             setOpen(next);
             if (next) await loadMembers();
           }}
-          style={{ ...styles.button, background: "#111827", color: "#fff" }}
+          style={inkBtn}
         >
           {open ? "Hide User Management" : "＋ Manage Dashboard Users"}
         </button>
       </div>
       {open && (
-        <div style={{ borderTop: "1px solid #eef2f7", padding: 16 }}>
+        <div style={{ borderTop: "1px solid #e6ebe7", padding: 16 }}>
           <form
             onSubmit={addUser}
             className="spya-grid-2"
@@ -1812,7 +1741,7 @@ function DashboardUsersPanel({ dashboardId }) {
               type="submit"
               style={{
                 ...styles.button,
-                background: members.length >= 2 ? "#cbd5e1" : "#7c3aed",
+                background: members.length >= 2 ? "#c9d1cb" : GREEN,
                 color: "#fff",
                 gridColumn: "1 / -1",
               }}
@@ -1828,7 +1757,7 @@ function DashboardUsersPanel({ dashboardId }) {
             Assigned users ({members.length}/2)
           </div>
           {members.length === 0 && (
-            <div style={{ color: "#64748b", fontSize: 13, marginTop: 8 }}>
+            <div style={{ color: "#5b6a63", fontSize: 13, marginTop: 8 }}>
               {loading ? "Loading users..." : "No dashboard users created yet."}
             </div>
           )}
@@ -1842,12 +1771,12 @@ function DashboardUsersPanel({ dashboardId }) {
                 gap: 10,
                 alignItems: "end",
                 padding: "12px 0",
-                borderBottom: "1px solid #f1f5f9",
+                borderBottom: "1px solid #eef1ee",
               }}
             >
               <div>
                 <div style={{ fontWeight: 800 }}>{member.username}</div>
-                <div style={{ color: "#64748b", fontSize: 11 }}>
+                <div style={{ color: "#5b6a63", fontSize: 12 }}>
                   {member.is_active ? "Active" : "Inactive"}
                 </div>
               </div>
@@ -1869,11 +1798,7 @@ function DashboardUsersPanel({ dashboardId }) {
                 type="button"
                 disabled={loading}
                 onClick={() => resetPassword(member)}
-                style={{
-                  ...styles.button,
-                  background: "#f1f5f9",
-                  color: "#334155",
-                }}
+                style={ghostBtn}
               >
                 Reset Password
               </button>
@@ -1881,11 +1806,11 @@ function DashboardUsersPanel({ dashboardId }) {
           ))}
           {error && <ErrorText>{error}</ErrorText>}
           {message && (
-            <div style={{ color: "#15803d", fontSize: 13, marginTop: 10 }}>
+            <div style={{ color: "#0b4a3d", fontSize: 13, marginTop: 10 }}>
               {message}
             </div>
           )}
-          <div style={{ color: "#64748b", fontSize: 11, marginTop: 12 }}>
+          <div style={{ color: "#5b6a63", fontSize: 12, marginTop: 12 }}>
             Users sign in with their User ID and password and can access only
             this assigned dashboard.
           </div>
@@ -1895,6 +1820,7 @@ function DashboardUsersPanel({ dashboardId }) {
   );
 }
 
+/* ---------- Registrations dashboard ---------- */
 function UserDashboard({
   dashboard,
   categories,
@@ -1914,7 +1840,7 @@ function UserDashboard({
   const cell = {
     padding: "12px 10px",
     verticalAlign: "top",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid #eef1ee",
     overflowWrap: "break-word",
   };
 
@@ -1959,46 +1885,22 @@ function UserDashboard({
             paddingBottom: 22,
           }}
         >
-          <button
-            onClick={onBack}
-            style={{
-              ...styles.button,
-              background: "transparent",
-              color: "#64748b",
-              paddingLeft: 0,
-            }}
-          >
+          <button onClick={onBack} style={backBtn}>
             ← Dashboards
           </button>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 900, letterSpacing: 1.2 }}>
-              {dashboard.association_name}
-            </div>
+          <div style={{ fontWeight: 800, fontFamily: HEAD_FONT }}>
+            {dashboard.association_name}
           </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <div
-            style={{
-              color: "#7c3aed",
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: 1.4,
-            }}
-          >
-            TOKEN MANAGEMENT
+          <div style={{ color: GREEN, fontSize: 13, fontWeight: 700 }}>
+            Token management
           </div>
-          <h1 style={{ margin: "5px 0", fontSize: 32 }}>
+          <h1 style={{ margin: "5px 0", fontSize: 34 }}>
             {dashboard.association_name}
           </h1>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: 0, color: "#5b6a63", fontSize: 14 }}>
             Manage registrations for this dashboard.
           </p>
         </div>
@@ -2018,6 +1920,7 @@ function UserDashboard({
           <Stat label="REGISTRATIONS" value={entries.length} />
           <Stat label="CATEGORIES" value={categories.length} />
           <Stat
+            tone="warn"
             label="PAYMENT PENDING"
             value={
               entries.filter((e) => e.status === "Payment Not Received").length
@@ -2034,34 +1937,20 @@ function UserDashboard({
               justifyContent: "space-between",
               alignItems: "center",
               gap: 10,
-              borderBottom: "1px solid #eef2f7",
+              borderBottom: "1px solid #e6ebe7",
             }}
           >
             <div>
-              <div style={{ fontWeight: 900 }}>Registrations</div>
-              <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 3 }}>
+              <div style={{ fontWeight: 800, fontSize: 17 }}>Registrations</div>
+              <div style={{ color: "#8a968f", fontSize: 12, marginTop: 3 }}>
                 PostgreSQL-backed data
               </div>
             </div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-              <button
-                onClick={onCreate}
-                style={{
-                  ...styles.button,
-                  background: "#7c3aed",
-                  color: "#fff",
-                }}
-              >
+              <button onClick={onCreate} style={greenBtn}>
                 + Create Token
               </button>
-              <button
-                onClick={onRefresh}
-                style={{
-                  ...styles.button,
-                  background: "#f1f5f9",
-                  color: "#334155",
-                }}
-              >
+              <button onClick={onRefresh} style={ghostBtn}>
                 ↻ Refresh
               </button>
             </div>
@@ -2086,12 +1975,14 @@ function UserDashboard({
                 <button
                   key={value}
                   onClick={() => setFilter(value)}
+                  aria-pressed={filter === value}
                   style={{
                     ...styles.button,
-                    padding: "7px 10px",
-                    fontSize: 12,
-                    background: filter === value ? "#111827" : "#f1f5f9",
-                    color: filter === value ? "#fff" : "#475569",
+                    padding: "7px 12px",
+                    fontSize: 13,
+                    minHeight: 36,
+                    background: filter === value ? INK : "#f1f4f1",
+                    color: filter === value ? "#fff" : "#4b5a53",
                   }}
                 >
                   {label}
@@ -2106,6 +1997,7 @@ function UserDashboard({
                 ...styles.input,
                 width: "auto",
                 minWidth: 150,
+                minHeight: 38,
                 padding: "8px 10px",
               }}
             >
@@ -2118,7 +2010,7 @@ function UserDashboard({
           </div>
 
           {!filtered.length ? (
-            <div style={{ padding: 45, textAlign: "center", color: "#94a3b8" }}>
+            <div style={{ padding: 45, textAlign: "center", color: "#8a968f" }}>
               No registrations found.
             </div>
           ) : (
@@ -2147,13 +2039,7 @@ function UserDashboard({
                   <col style={{ width: 185 }} />
                 </colgroup>
                 <thead>
-                  <tr
-                    style={{
-                      background: "#f8fafc",
-                      color: "#64748b",
-                      fontSize: 10,
-                    }}
-                  >
+                  <tr style={{ background: "#f4f6f4", color: "#4b5a53" }}>
                     {[
                       "TOKEN",
                       "CATEGORY",
@@ -2172,7 +2058,7 @@ function UserDashboard({
                           padding: "12px 10px",
                           textAlign: "left",
                           whiteSpace: "nowrap",
-                          borderBottom: "1px solid #e2e8f0",
+                          borderBottom: "1px solid #dde3de",
                         }}
                       >
                         {x}
@@ -2185,11 +2071,9 @@ function UserDashboard({
                     const category = categories.find(
                       (c) => c.id === entry.categoryId,
                     );
+                    const printStatus = entry.printStatus || "Not Yet Printed";
                     return (
-                      <tr
-                        key={entry.id}
-                        style={{ borderTop: "1px solid #f1f5f9" }}
-                      >
+                      <tr key={entry.id}>
                         <td
                           style={{
                             ...cell,
@@ -2256,11 +2140,10 @@ function UserDashboard({
                                       onCancel(entry, categoryEntry)
                                     }
                                     style={{
-                                      ...styles.button,
-                                      padding: "4px 7px",
-                                      background: "#fef2f2",
-                                      color: "#b91c1c",
-                                      fontSize: 10,
+                                      ...dangerSoftBtn,
+                                      padding: "4px 8px",
+                                      minHeight: 28,
+                                      fontSize: 11,
                                     }}
                                   >
                                     Cancel category
@@ -2279,7 +2162,13 @@ function UserDashboard({
                         <td style={{ ...cell, textAlign: "center" }}>
                           {entry.quantity}
                         </td>
-                        <td style={{ ...cell, whiteSpace: "nowrap" }}>
+                        <td
+                          style={{
+                            ...cell,
+                            whiteSpace: "nowrap",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
                           ₹{Number(entry.amount).toFixed(2)}
                         </td>
                         <td style={{ ...cell, whiteSpace: "nowrap" }}>
@@ -2302,29 +2191,13 @@ function UserDashboard({
                             }}
                           >
                             {entry.status !== "Cancelled" && (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  borderRadius: 999,
-                                  padding: "5px 9px",
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  whiteSpace: "nowrap",
-                                  color:
-                                    (entry.printStatus || "Not Yet Printed") ===
-                                    "Complete"
-                                      ? "#047857"
-                                      : "#b45309",
-                                  background:
-                                    (entry.printStatus || "Not Yet Printed") ===
-                                    "Complete"
-                                      ? "#d1fae5"
-                                      : "#fef3c7",
-                                }}
-                              >
-                                {entry.printStatus || "Not Yet Printed"}
-                              </span>
+                              <StatusBadge
+                                status={
+                                  printStatus === "Complete"
+                                    ? "Printed"
+                                    : printStatus
+                                }
+                              />
                             )}
                             <div
                               style={{
@@ -2345,11 +2218,12 @@ function UserDashboard({
                                   }
                                   aria-label="Payment status"
                                   style={{
-                                    border: "1px solid #d1d5db",
+                                    border: "1px solid #c3ccc5",
                                     borderRadius: 8,
                                     padding: 6,
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     maxWidth: 130,
+                                    minHeight: 34,
                                   }}
                                 >
                                   <option>Complete</option>
@@ -2362,11 +2236,10 @@ function UserDashboard({
                                   title="Print / reprint labels"
                                   aria-label="Print or reprint labels"
                                   style={{
-                                    ...styles.button,
-                                    padding: "7px 9px",
-                                    background: "#111827",
-                                    color: "#fff",
-                                    fontSize: 11,
+                                    ...inkBtn,
+                                    padding: "7px 10px",
+                                    minHeight: 34,
+                                    fontSize: 12,
                                     flexShrink: 0,
                                   }}
                                 >
@@ -2394,58 +2267,7 @@ function UserDashboard({
   );
 }
 
-function Stat({ label, value }) {
-  return (
-    <div style={{ ...styles.card, padding: 15 }}>
-      <div
-        style={{
-          fontSize: 10,
-          color: "#64748b",
-          fontWeight: 900,
-          letterSpacing: 0.7,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 900, marginTop: 7 }}>{value}</div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const cancelled = status === "Cancelled";
-  const partial = status === "Partially Cancelled";
-  const pending = status === "Payment Not Received";
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        padding: "5px 8px",
-        borderRadius: 8,
-        fontWeight: 800,
-        fontSize: 10,
-        whiteSpace: "nowrap",
-        background: cancelled
-          ? "#fef2f2"
-          : partial
-            ? "#fff7ed"
-            : pending
-              ? "#fff7ed"
-              : "#ecfdf5",
-        color: cancelled
-          ? "#b91c1c"
-          : partial
-            ? "#9a3412"
-            : pending
-              ? "#c2410c"
-              : "#047857",
-      }}
-    >
-      {status}
-    </span>
-  );
-}
-
+/* ---------- Admin inventory ---------- */
 function AdminDashboard({ dashboards, onBack, onLogout }) {
   const [selectedId, setSelectedId] = useState(dashboards[0]?.id || "");
   const [inventory, setInventory] = useState(null);
@@ -2538,15 +2360,40 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
   const th = {
     textAlign: "left",
     padding: "11px 10px",
-    background: "#f8fafc",
-    borderBottom: "1px solid #e2e8f0",
+    background: "#f4f6f4",
+    color: "#4b5a53",
+    fontSize: 12,
+    borderBottom: "1px solid #dde3de",
     whiteSpace: "nowrap",
   };
   const td = {
     padding: "11px 10px",
-    borderBottom: "1px solid #eef2f7",
+    borderBottom: "1px solid #eef1ee",
     verticalAlign: "top",
   };
+  const tableCard = {
+    ...styles.card,
+    padding: 18,
+    marginBottom: 18,
+    overflowX: "auto",
+  };
+  const mutedP = { margin: "5px 0 0", color: "#5b6a63", fontSize: 13 };
+  const orderCell = (row) => (
+    <td style={td}>
+      <div style={{ fontWeight: 800 }}>
+        ORD{String(row.order_number || "").padStart(4, "0")}
+      </div>
+      <div style={{ color: "#5b6a63", marginTop: 3 }}>
+        {row.prefix || ""}
+        {row.token_start || ""}
+        {row.token_end && row.token_end !== row.token_start
+          ? `–${row.prefix || ""}${row.token_end}`
+          : ""}
+      </div>
+    </td>
+  );
+  const createdAt = (row) =>
+    row.created_at ? new Date(row.created_at).toLocaleString("en-IN") : "—";
 
   return (
     <div style={styles.page}>
@@ -2565,20 +2412,13 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
           }}
         >
           <div>
-            <div
-              style={{
-                color: "#7c3aed",
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: 1.3,
-              }}
-            >
-              ADMIN ONLY
+            <div style={{ color: GREEN, fontSize: 13, fontWeight: 700 }}>
+              Admin only
             </div>
-            <h1 style={{ margin: "5px 0", fontSize: 30 }}>
-              Inventory Dashboard
+            <h1 style={{ margin: "5px 0", fontSize: 32 }}>
+              Inventory dashboard
             </h1>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
+            <p style={{ margin: 0, color: "#5b6a63", fontSize: 14 }}>
               Token generation totals by dashboard, category and user.
             </p>
           </div>
@@ -2586,19 +2426,11 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
             <button
               type="button"
               onClick={() => setShowPasswordForm((v) => !v)}
-              style={{ ...styles.button, background: "#111827", color: "#fff" }}
+              style={inkBtn}
             >
               Change Account Password
             </button>
-            <button
-              type="button"
-              onClick={onBack}
-              style={{
-                ...styles.button,
-                background: "#f1f5f9",
-                color: "#334155",
-              }}
-            >
+            <button type="button" onClick={onBack} style={ghostBtn}>
               Back to Dashboards
             </button>
           </div>
@@ -2613,8 +2445,8 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               maxWidth: 620,
             }}
           >
-            <h2 style={{ marginTop: 0, fontSize: 20 }}>
-              Change Account Password
+            <h2 style={{ marginTop: 0, fontSize: 21 }}>
+              Change account password
             </h2>
             <form onSubmit={submitPasswordChange}>
               <Field label="Current Password">
@@ -2651,19 +2483,14 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               </Field>
               {passwordError && <ErrorText>{passwordError}</ErrorText>}
               {passwordMessage && (
-                <div style={{ color: "#047857", fontSize: 13, marginTop: 8 }}>
+                <div style={{ color: "#0b4a3d", fontSize: 13, marginTop: 8 }}>
                   {passwordMessage}
                 </div>
               )}
               <button
                 type="submit"
                 disabled={savingPassword}
-                style={{
-                  ...styles.button,
-                  background: "#7c3aed",
-                  color: "#fff",
-                  marginTop: 12,
-                }}
+                style={{ ...greenBtn, marginTop: 12 }}
               >
                 {savingPassword ? "Updating..." : "Update Password"}
               </button>
@@ -2698,7 +2525,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
         ) : (
           inventory && (
             <>
-              <h2 style={{ margin: "0 0 14px", fontSize: 22 }}>
+              <h2 style={{ margin: "0 0 14px", fontSize: 24 }}>
                 {inventory.dashboard?.association_name}
               </h2>
               <div
@@ -2729,11 +2556,11 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               </div>
 
               <div style={{ ...styles.card, padding: 18, marginBottom: 18 }}>
-                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 19 }}>
-                  Action Status Breakdown
+                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>
+                  Action status breakdown
                 </h2>
                 <p
-                  style={{ margin: "0 0 14px", color: "#64748b", fontSize: 12 }}
+                  style={{ margin: "0 0 14px", color: "#5b6a63", fontSize: 13 }}
                 >
                   Select any count to view the matching token records below.
                   Counts represent tokens; registrations show grouped orders.
@@ -2750,19 +2577,19 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     const active = selectedActionStatus === item.status;
                     const tone =
                       item.status === "Complete"
-                        ? { bg: "#ecfdf5", fg: "#047857", border: "#10b981" }
+                        ? { bg: GREEN_SOFT, fg: "#0b4a3d", border: "#1b9a7e" }
                         : item.status === "Payment Not Received"
-                          ? { bg: "#fff7ed", fg: "#c2410c", border: "#fb923c" }
+                          ? { bg: "#fdf0dc", fg: "#8a4b00", border: "#e8a200" }
                           : item.status === "Cancelled"
                             ? {
-                                bg: "#fef2f2",
-                                fg: "#b91c1c",
-                                border: "#f87171",
+                                bg: "#fbe9e7",
+                                fg: "#a32d1f",
+                                border: "#d9534a",
                               }
                             : {
-                                bg: "#f1f5f9",
-                                fg: "#334155",
-                                border: "#94a3b8",
+                                bg: "#f1f4f1",
+                                fg: "#34443c",
+                                border: "#8a968f",
                               };
                     return (
                       <button
@@ -2776,7 +2603,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                         style={{
                           textAlign: "left",
                           cursor: "pointer",
-                          border: `2px solid ${active ? tone.border : "#e2e8f0"}`,
+                          border: `2px solid ${active ? tone.border : "#dde3de"}`,
                           background: tone.bg,
                           color: tone.fg,
                           borderRadius: 12,
@@ -2786,8 +2613,8 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                       >
                         <div
                           style={{
-                            fontSize: 11,
-                            fontWeight: 800,
+                            fontSize: 12,
+                            fontWeight: 700,
                             lineHeight: 1.4,
                           }}
                         >
@@ -2795,21 +2622,22 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                         </div>
                         <div
                           style={{
-                            fontSize: 25,
-                            fontWeight: 900,
+                            fontSize: 28,
+                            fontWeight: 800,
                             marginTop: 6,
+                            fontFamily: HEAD_FONT,
                           }}
                         >
                           {number(item.token_count)}
                         </div>
-                        <div style={{ fontSize: 11, marginTop: 4 }}>
+                        <div style={{ fontSize: 12, marginTop: 4 }}>
                           {number(item.registrations)} registration(s)
                         </div>
                         <div
                           style={{
-                            fontSize: 10,
+                            fontSize: 11,
                             marginTop: 8,
-                            fontWeight: 800,
+                            fontWeight: 700,
                           }}
                         >
                           {active ? "Hide details ↑" : "View details ↓"}
@@ -2818,7 +2646,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     );
                   })}
                   {!actionStatuses.length && (
-                    <div style={{ color: "#64748b", fontSize: 13 }}>
+                    <div style={{ color: "#5b6a63", fontSize: 13 }}>
                       No action-status data available yet.
                     </div>
                   )}
@@ -2826,11 +2654,11 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               </div>
 
               <div style={{ ...styles.card, padding: 18, marginBottom: 18 }}>
-                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 19 }}>
-                  Not Yet Printed Tokens
+                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>
+                  Not yet printed tokens
                 </h2>
                 <p
-                  style={{ margin: "0 0 14px", color: "#64748b", fontSize: 12 }}
+                  style={{ margin: "0 0 14px", color: "#5b6a63", fontSize: 13 }}
                 >
                   Select the count to view active token registrations whose
                   labels have not yet been marked as printed.
@@ -2845,24 +2673,31 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                   style={{
                     textAlign: "left",
                     cursor: "pointer",
-                    border: `2px solid ${showNotPrintedDetails ? "#f59e0b" : "#fed7aa"}`,
-                    background: "#fff7ed",
-                    color: "#9a3412",
+                    border: `2px solid ${showNotPrintedDetails ? "#e8a200" : "#f1d9a8"}`,
+                    background: "#fdf0dc",
+                    color: "#8a4b00",
                     borderRadius: 12,
                     padding: 16,
                     minWidth: 220,
                   }}
                 >
-                  <div style={{ fontSize: 11, fontWeight: 800 }}>
-                    NOT YET PRINTED
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>
+                    Not yet printed
                   </div>
-                  <div style={{ fontSize: 27, fontWeight: 900, marginTop: 6 }}>
+                  <div
+                    style={{
+                      fontSize: 30,
+                      fontWeight: 800,
+                      marginTop: 6,
+                      fontFamily: HEAD_FONT,
+                    }}
+                  >
                     {number(notPrintedSummary.token_count)}
                   </div>
-                  <div style={{ fontSize: 11, marginTop: 4 }}>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
                     {number(notPrintedSummary.registrations)} registration(s)
                   </div>
-                  <div style={{ fontSize: 10, marginTop: 8, fontWeight: 800 }}>
+                  <div style={{ fontSize: 11, marginTop: 8, fontWeight: 700 }}>
                     {showNotPrintedDetails
                       ? "Hide details ↑"
                       : "View details ↓"}
@@ -2871,14 +2706,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               </div>
 
               {showNotPrintedDetails && (
-                <div
-                  style={{
-                    ...styles.card,
-                    padding: 18,
-                    marginBottom: 18,
-                    overflowX: "auto",
-                  }}
-                >
+                <div style={tableCard}>
                   <div
                     style={{
                       display: "flex",
@@ -2890,16 +2718,10 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     }}
                   >
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 19 }}>
-                        Not Yet Printed Tokens — Details
+                      <h2 style={{ margin: 0, fontSize: 20 }}>
+                        Not yet printed tokens — details
                       </h2>
-                      <p
-                        style={{
-                          margin: "5px 0 0",
-                          color: "#64748b",
-                          fontSize: 12,
-                        }}
-                      >
+                      <p style={mutedP}>
                         {number(notPrintedSummary.token_count)} token(s) across{" "}
                         {number(notPrintedRows.length)} registration record(s)
                       </p>
@@ -2907,11 +2729,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     <button
                       type="button"
                       onClick={() => setShowNotPrintedDetails(false)}
-                      style={{
-                        ...styles.button,
-                        background: "#f1f5f9",
-                        color: "#334155",
-                      }}
+                      style={ghostBtn}
                     >
                       Close Details
                     </button>
@@ -2921,7 +2739,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                       width: "100%",
                       minWidth: 1000,
                       borderCollapse: "collapse",
-                      fontSize: 12,
+                      fontSize: 13,
                     }}
                   >
                     <thead>
@@ -2941,20 +2759,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     <tbody>
                       {notPrintedRows.map((row) => (
                         <tr key={row.id}>
-                          <td style={td}>
-                            <div style={{ fontWeight: 800 }}>
-                              ORD
-                              {String(row.order_number || "").padStart(4, "0")}
-                            </div>
-                            <div style={{ color: "#64748b", marginTop: 3 }}>
-                              {row.prefix || ""}
-                              {row.token_start || ""}
-                              {row.token_end &&
-                              row.token_end !== row.token_start
-                                ? `–${row.prefix || ""}${row.token_end}`
-                                : ""}
-                            </div>
-                          </td>
+                          {orderCell(row)}
                           <td style={td}>{row.customer_name || "—"}</td>
                           <td style={td}>{row.customer_phone || "—"}</td>
                           <td style={td}>{row.category_name || "—"}</td>
@@ -2965,11 +2770,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                             {row.print_status || "Not Yet Printed"}
                           </td>
                           <td style={td}>{row.created_by || "—"}</td>
-                          <td style={td}>
-                            {row.created_at
-                              ? new Date(row.created_at).toLocaleString("en-IN")
-                              : "—"}
-                          </td>
+                          <td style={td}>{createdAt(row)}</td>
                         </tr>
                       ))}
                       {!notPrintedRows.length && (
@@ -2985,14 +2786,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
               )}
 
               {selectedActionStatus && (
-                <div
-                  style={{
-                    ...styles.card,
-                    padding: 18,
-                    marginBottom: 18,
-                    overflowX: "auto",
-                  }}
-                >
+                <div style={tableCard}>
                   <div
                     style={{
                       display: "flex",
@@ -3004,27 +2798,17 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     }}
                   >
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 19 }}>
-                        {selectedActionStatus} — Details
+                      <h2 style={{ margin: 0, fontSize: 20 }}>
+                        {selectedActionStatus} — details
                       </h2>
-                      <p
-                        style={{
-                          margin: "5px 0 0",
-                          color: "#64748b",
-                          fontSize: 12,
-                        }}
-                      >
+                      <p style={mutedP}>
                         {number(selectedStatusRows.length)} matching record(s)
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setSelectedActionStatus("")}
-                      style={{
-                        ...styles.button,
-                        background: "#f1f5f9",
-                        color: "#334155",
-                      }}
+                      style={ghostBtn}
                     >
                       Close Details
                     </button>
@@ -3034,7 +2818,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                       width: "100%",
                       minWidth: 900,
                       borderCollapse: "collapse",
-                      fontSize: 12,
+                      fontSize: 13,
                     }}
                   >
                     <thead>
@@ -3053,20 +2837,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                     <tbody>
                       {selectedStatusRows.map((row) => (
                         <tr key={row.id}>
-                          <td style={td}>
-                            <div style={{ fontWeight: 800 }}>
-                              ORD
-                              {String(row.order_number || "").padStart(4, "0")}
-                            </div>
-                            <div style={{ color: "#64748b", marginTop: 3 }}>
-                              {row.prefix || ""}
-                              {row.token_start || ""}
-                              {row.token_end &&
-                              row.token_end !== row.token_start
-                                ? `–${row.prefix || ""}${row.token_end}`
-                                : ""}
-                            </div>
-                          </td>
+                          {orderCell(row)}
                           <td style={td}>{row.customer_name || "—"}</td>
                           <td style={td}>{row.customer_phone || "—"}</td>
                           <td style={td}>{row.category_name || "—"}</td>
@@ -3074,11 +2845,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                           <td style={td}>₹{number(row.amount)}</td>
                           <td style={td}>{row.payment_mode || "—"}</td>
                           <td style={td}>{row.created_by || "—"}</td>
-                          <td style={td}>
-                            {row.created_at
-                              ? new Date(row.created_at).toLocaleString("en-IN")
-                              : "—"}
-                          </td>
+                          <td style={td}>{createdAt(row)}</td>
                         </tr>
                       ))}
                       {!selectedStatusRows.length && (
@@ -3093,16 +2860,9 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                 </div>
               )}
 
-              <div
-                style={{
-                  ...styles.card,
-                  padding: 18,
-                  marginBottom: 18,
-                  overflowX: "auto",
-                }}
-              >
-                <h2 style={{ marginTop: 0, fontSize: 19 }}>
-                  Token Generation by User
+              <div style={tableCard}>
+                <h2 style={{ marginTop: 0, fontSize: 20 }}>
+                  Token generation by user
                 </h2>
                 <table
                   style={{
@@ -3130,8 +2890,8 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                         <td style={td}>
                           <span
                             style={{
-                              background: row.isAdmin ? "#ede9fe" : "#f1f5f9",
-                              color: row.isAdmin ? "#6d28d9" : "#475569",
+                              background: row.isAdmin ? "#d5e9e4" : "#f1f4f1",
+                              color: row.isAdmin ? GREEN : "#4b5a53",
                               padding: "4px 8px",
                               borderRadius: 20,
                               fontWeight: 700,
@@ -3158,9 +2918,9 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
                 </table>
               </div>
 
-              <div style={{ ...styles.card, padding: 18, overflowX: "auto" }}>
-                <h2 style={{ marginTop: 0, fontSize: 19 }}>
-                  Inventory by Token Category
+              <div style={{ ...tableCard, marginBottom: 0 }}>
+                <h2 style={{ marginTop: 0, fontSize: 20 }}>
+                  Inventory by token category
                 </h2>
                 <table
                   style={{
@@ -3209,8 +2969,7 @@ function AdminDashboard({ dashboards, onBack, onLogout }) {
   );
 }
 
-/* Legacy standalone Admin Received component removed; admin tools belong inside dashboard. */
-
+/* ---------- App ---------- */
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3293,6 +3052,7 @@ export default function App() {
     setEntries([]);
     setScreen("dashboards");
   }
+
   if (loading) {
     return (
       <>
@@ -3307,8 +3067,12 @@ export default function App() {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 25, fontWeight: 900 }}>SPYA</div>
-            <div style={{ color: "#64748b", marginTop: 7 }}>Loading...</div>
+            <div
+              style={{ fontSize: 26, fontWeight: 800, fontFamily: HEAD_FONT }}
+            >
+              SPYA
+            </div>
+            <div style={{ color: "#5b6a63", marginTop: 7 }}>Loading...</div>
           </div>
         </div>
       </>
